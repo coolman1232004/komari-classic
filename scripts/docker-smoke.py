@@ -1,5 +1,6 @@
 """Exercise the actual container over HTTP using disposable CI credentials."""
 import json
+import http.client
 import subprocess
 from pathlib import Path
 import tempfile
@@ -36,7 +37,14 @@ cookie = login.headers['Set-Cookie']
 assert 'HttpOnly' in cookie and 'SameSite=Lax' in cookie
 assert request('/api/admin/client/list', headers={'Cookie': cookie}).status == 200
 assert request('/api/admin/settings/', b'{}', {'Cookie': cookie, 'Origin': 'https://untrusted.invalid', 'Content-Type': 'text/plain'}).status == 403
-assert request('/api/login', b'x' * (8*1024*1024+1)).status == 413
+# The server rejects an oversized Content-Length before reading the body.
+# Read that response directly instead of uploading after the socket closes.
+oversized = http.client.HTTPConnection('127.0.0.1', 25774, timeout=10)
+oversized.putrequest('POST', '/api/login')
+oversized.putheader('Content-Length', str(8*1024*1024+1))
+oversized.endheaders()
+assert oversized.getresponse().status == 413
+oversized.close()
 
 # Run the built agent against the built server with a disposable node token.
 state = Path(tempfile.gettempdir()) / 'komari-smoke-node'
