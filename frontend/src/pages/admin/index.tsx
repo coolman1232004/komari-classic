@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 24339)
-Total output lines: 2764
-
 import {
   quotePowerShellArg,
   quoteShellArg,
@@ -1460,7 +1457,48 @@ function GenerateCommandButton({ node, settings }: { node: NodeDetail, settings:
     }();
     const token = node.token || "";
     let args = ["-e", host, "-t", token];
-    // 根据安装选项…339 tokens truncated…);
+    // 根据安装选项生成参数
+    if (installOptions.disableWebSsh) {
+      args.push("--disable-web-ssh");
+    }
+    if (installOptions.disableAutoUpdate) {
+      args.push("--disable-auto-update");
+    }
+    if (installOptions.ignoreUnsafeCert) {
+      args.push("--ignore-unsafe-cert");
+    }
+    if (installOptions.memoryIncludeCache) {
+      args.push("--memory-include-cache");
+    }
+    if (installOptions.getIpAddrFromNic) {
+      args.push("--get-ip-addr-from-nic");
+    }
+    if (installOptions.enableGpu) {
+      args.push("--gpu");
+    }
+    const ghproxy = installOptions.ghproxy.trim();
+    if (enableGhproxy && ghproxy) {
+      const finalUrl = (
+        ghproxy.startsWith("http")
+          ? ghproxy
+          : `http://${ghproxy}`
+      ).replace(/\/+$/, "");
+      args.push(`--install-ghproxy`);
+      args.push(finalUrl);
+    }
+    const installDir = installOptions.dir.trim();
+    if (enableCustomDir && installDir) {
+      args.push(`--install-dir`);
+      args.push(installDir);
+    }
+    const serviceName = installOptions.serviceName.trim();
+    if (enableCustomServiceName && serviceName) {
+      args.push(`--install-service-name`);
+      args.push(serviceName);
+    }
+    const includeNics = installOptions.includeNics.trim();
+    if (enableIncludeNics && includeNics) {
+      args.push(`--include-nics`);
       args.push(includeNics);
     }
     const excludeNics = installOptions.excludeNics.trim();
