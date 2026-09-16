@@ -1,0 +1,138 @@
+name: Release Komari Classic
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to rebuild, for example v1.2.5-fix2.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ github.event.release.tag_name || inputs.tag }}
+      version: ${{ github.event.release.tag_name || inputs.tag }}
+
+  attach:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: komari-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Attach server, agent and theme to this release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: gh release upload "$RELEASE_TAG" artifacts/* --clobber
+
+  docker:
+    needs: attach
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-docker-${{ github.repository }}-${{ matrix.component }}
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: server
+            context: .
+            pattern: komari-linux-*
+            suffix: ""
+          - component: agent
+            context: agent
+            pattern: komari-agent-linux-*
+            suffix: -agent
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}${{ matrix.suffix }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ matrix.pattern }}
+          path: ${{ matrix.context }}
+          merge-multiple: true
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: type=raw,value=${{ env.RELEASE_TAG }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+
+      - name: Check whether this is the latest GitHub release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          is_latest="$(gh api graphql \
+            -f 'query=query($owner: String!, $name: String!, $tag: String!) { repository(owner: $owner, name: $name) { release(tagName: $tag) { isLatest } } }' \
+            -F owner="$REPO_OWNER" -F name="$REPO_NAME" -F tag="$RELEASE_TAG" \
+            --jq '.data.repository.release.isLatest')"
+          echo "is_latest=$is_latest" >> "$GITHUB_OUTPUT"
+
+      - name: Promote Docker latest tag
+        if: steps.release.outputs.is_latest == 'true'
+        run: docker buildx imagetools create --tag "${REGISTRY}/${IMAGE_NAME}:latest" "${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG}"
+
+      - name: Promote Docker snapshot tag
+        if: startsWith(env.RELEASE_TAG, 'Snapshot-')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          latest_snapshot="$(gh api --paginate "repos/${GH_REPO}/releases?per_page=100" \
+            --jq '.[] | select(.draft == false and .prerelease == true and (.tag_name | startswith("Snapshot-"))) | [.published_at, .tag_name] | @tsv' \
+            | LC_ALL=C sort | tail -n 1 | cut -f 2)"
+          if [ "$RELEASE_TAG" = "$latest_snapshot" ]; then
+            docker buildx imagetools create --tag "${REGISTRY}/${IMAGE_NAME}:snapshot" "${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG}"
+          fi

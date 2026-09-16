@@ -1,0 +1,171 @@
+name: Build Komari Classic
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Repository commit or tag to build.
+        required: true
+        type: string
+      version:
+        description: Shared server and agent release version.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: ./.github/actions/build-frontend
+        with:
+          artifact-name: frontend-build
+
+      - name: Package theme
+        working-directory: web/public/defaultTheme
+        run: zip -qr "$GITHUB_WORKSPACE/komari-theme.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: komari-theme
+          path: komari-theme.zip
+
+  server:
+    needs: frontend
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            target: x86_64-windows-gnu
+            extension: .exe
+          - goos: windows
+            goarch: arm64
+            target: aarch64-windows-gnu
+            extension: .exe
+          - goos: windows
+            goarch: "386"
+            target: x86-windows-gnu
+            extension: .exe
+          - goos: linux
+            goarch: amd64
+            target: x86_64-linux-musl
+            extension: ""
+          - goos: linux
+            goarch: arm64
+            target: aarch64-linux-musl
+            extension: ""
+          - goos: linux
+            goarch: "386"
+            target: x86-linux-musl
+            extension: ""
+          - goos: linux
+            goarch: riscv64
+            target: riscv64-linux-musl
+            extension: ""
+          - goos: linux
+            goarch: loong64
+            target: loongarch64-linux-musl
+            extension: ""
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: "1"
+      CC: zig cc -target ${{ matrix.target }}
+      GIN_MODE: release
+      VERSION: ${{ inputs.version || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: ./.github/actions/restore-frontend
+        with:
+          artifact-name: frontend-build
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: ./.github/actions/setup-zig
+
+      - name: Test server
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        # Zig's musl objects require the external linker, including net-only tests.
+        run: go test -ldflags="-linkmode=external" ./...
+
+      - name: Build server
+        env:
+          BINARY_NAME: komari-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}
+        run: |
+          VERSION_HASH="$(git rev-parse HEAD)"
+          go build -trimpath -ldflags="-s -w -X github.com/komari-monitor/komari/utils.CurrentVersion=${VERSION} -X github.com/komari-monitor/komari/utils.VersionHash=${VERSION_HASH}" -o "$BINARY_NAME" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: komari-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: komari-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}
+
+  agent:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [windows, linux, darwin, freebsd]
+        goarch: [amd64, arm64, "386", arm]
+        exclude:
+          - goos: windows
+            goarch: arm
+          - goos: darwin
+            goarch: "386"
+          - goos: darwin
+            goarch: arm
+    defaults:
+      run:
+        working-directory: agent
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: "0"
+      VERSION: ${{ inputs.version || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      - name: Test agent
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        # These upstream integration tests require external IPv6/ICMP connectivity.
+        run: go test ./... -skip '^(TestICMPPing|TestTCPPing|TestHTTPPing)$'
+
+      - name: Build agent
+        run: |
+          BINARY_NAME="komari-agent-${GOOS}-${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+          go build -trimpath -ldflags="-X github.com/komari-monitor/komari-agent/update.CurrentVersion=${VERSION}" -o "$BINARY_NAME" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: komari-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: agent/komari-agent-${{ matrix.goos }}-${{ matrix.goarch }}*

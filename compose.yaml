@@ -1,0 +1,9 @@
+services:
+  komari:
+    image: ghcr.io/kadidalax/komari-classic:latest
+    container_name: komari
+    restart: unless-stopped
+    ports:
+      - "25774:25774"
+    volumes:
+      - ./data:/app/data

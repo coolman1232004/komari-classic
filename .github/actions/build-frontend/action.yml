@@ -1,0 +1,52 @@
+name: Build frontend theme
+description: Build the pinned frontend in this repository and optionally upload it as an artifact.
+
+inputs:
+  node-version:
+    description: Node.js version used to build the frontend.
+    default: "22"
+  artifact-name:
+    description: Optional artifact name for the packed frontend theme.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Build pinned frontend
+      shell: bash
+      working-directory: frontend
+      run: |
+        set -euo pipefail
+        npm ci --no-audit --no-fund
+        npm run build
+
+    - name: Copy frontend into the server
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p web/public/defaultTheme/dist
+        cp -r frontend/dist/. web/public/defaultTheme/dist/
+        cp frontend/komari-theme.json web/public/defaultTheme/
+        cp frontend/preview.png web/public/defaultTheme/preview.png
+        cp frontend/preview.png web/public/defaultTheme/perview.png
+
+    - name: Pack frontend artifact
+      if: ${{ inputs.artifact-name != '' }}
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+      run: tar -czf "$RUNNER_TEMP/$ARTIFACT_NAME.tar.gz" -C web/public/defaultTheme .
+
+    - name: Upload frontend artifact
+      if: ${{ inputs.artifact-name != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/${{ inputs.artifact-name }}.tar.gz
