@@ -317,7 +317,7 @@ const AutoDiscoverySection = ({
     if (selectedPlatform === "windows") {
       scriptFile = "install.ps1";
     }
-    let scriptUrl = `https://raw.githubusercontent.com/kadidalax/komari-classic/refs/heads/main/agent/${scriptFile}`;
+    let scriptUrl = `https://raw.githubusercontent.com/coolman1232004/komari-classic/refs/heads/main/agent/${scriptFile}`;
     if (enableGhproxy && ghproxy) {
       scriptUrl = scriptUrl.slice(8); // 去掉 https://
       if (ghproxy.endsWith("/")) {
@@ -375,7 +375,7 @@ const AutoDiscoverySection = ({
           `touch .komari-auto-discovery.json && ` +
           `docker run -d --name komari-agent --restart=always ` +
           `-v .komari-auto-discovery.json:/app/auto-discovery.json ` +
-          `ghcr.io/kadidalax/komari-classic-agent:latest ` +
+          `ghcr.io/coolman1232004/komari-classic-agent:latest ` +
           quoteShellArgs(dockerArgs);
         break;
       }
@@ -1525,7 +1525,7 @@ function GenerateCommandButton({ node, settings }: { node: NodeDetail, settings:
       scriptFile = "install.ps1";
     }
     let scriptUrl =
-      `https://raw.githubusercontent.com/kadidalax/komari-classic/refs/heads/main/agent/${scriptFile}`;
+      `https://raw.githubusercontent.com/coolman1232004/komari-classic/refs/heads/main/agent/${scriptFile}`;
     if (enableGhproxy) {
       if (enableGhproxy && ghproxy) {
         scriptUrl = scriptUrl.slice(8); // 去掉 https://
@@ -1578,7 +1578,7 @@ function GenerateCommandButton({ node, settings }: { node: NodeDetail, settings:
         }
         finalCommand =
           `docker run -d --name komari-agent --restart=always ` +
-          `ghcr.io/kadidalax/komari-classic-agent:latest ` +
+          `ghcr.io/coolman1232004/komari-classic-agent:latest ` +
           quoteShellArgs(dockerArgs);
         break;
       }

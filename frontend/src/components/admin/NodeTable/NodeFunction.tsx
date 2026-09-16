@@ -87,13 +87,13 @@ export function ActionsCell({ row }: { row: Row<z.infer<typeof schema>> }) {
     switch (selectedPlatform) {
       case "linux":
         finalCommand =
-          `wget -qO- https://raw.githubusercontent.com/kadidalax/komari-classic/refs/heads/main/agent/install.sh | sudo bash -s -- ` +
+          `wget -qO- https://raw.githubusercontent.com/coolman1232004/komari-classic/refs/heads/main/agent/install.sh | sudo bash -s -- ` +
           quoteShellArgs(args);
         break;
       case "windows":
         finalCommand =
           `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ` +
-          `"iwr 'https://raw.githubusercontent.com/kadidalax/komari-classic/refs/heads/main/agent/install.ps1'` +
+          `"iwr 'https://raw.githubusercontent.com/coolman1232004/komari-classic/refs/heads/main/agent/install.ps1'` +
           ` -UseBasicParsing -OutFile 'install.ps1'; &` +
           ` '.\\install.ps1'`;
         args.forEach((arg) => {
@@ -103,7 +103,7 @@ export function ActionsCell({ row }: { row: Row<z.infer<typeof schema>> }) {
         break;
       case "macos":
         finalCommand =
-          `zsh <(curl -sL https://raw.githubusercontent.com/kadidalax/komari-classic/refs/heads/main/agent/install.sh) ` +
+          `zsh <(curl -sL https://raw.githubusercontent.com/coolman1232004/komari-classic/refs/heads/main/agent/install.sh) ` +
           quoteShellArgs(args);
         break;
     }

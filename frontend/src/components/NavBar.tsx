@@ -37,7 +37,7 @@ const NavBar = () => {
         <IconButton
           variant="soft"
           onClick={() => {
-            window.open("https://github.com/kadidalax/komari-classic", "_blank");
+            window.open("https://github.com/coolman1232004/komari-classic", "_blank");
           }}
         >
           <GitHubLogoIcon />
