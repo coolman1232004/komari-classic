@@ -1,5 +1,8 @@
 """Exercise the actual container over HTTP using disposable CI credentials."""
 import json
+import subprocess
+from pathlib import Path
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -34,4 +37,30 @@ assert 'HttpOnly' in cookie and 'SameSite=Lax' in cookie
 assert request('/api/admin/client/list', headers={'Cookie': cookie}).status == 200
 assert request('/api/admin/settings/', b'{}', {'Cookie': cookie, 'Origin': 'https://untrusted.invalid', 'Content-Type': 'text/plain'}).status == 403
 assert request('/api/login', b'x' * (8*1024*1024+1)).status == 413
+
+# Run the built agent against the built server with a disposable node token.
+state = Path(tempfile.gettempdir()) / 'komari-smoke-node'
+if state.exists():
+    saved = request('/api/admin/client/'+state.read_text(), headers={'Cookie': cookie})
+    assert saved.status == 200 and json.load(saved)['name'] == 'docker-ci-node', 'Node did not survive restart'
+created = request('/api/admin/client/add', b'{"name":"docker-ci-node"}', {'Cookie': cookie, 'Content-Type': 'application/json'})
+assert created.status == 200, 'Node creation failed'
+node = json.load(created)
+assert 'uuid' in node and 'token' in node
+state.write_text(node['uuid'])
+subprocess.run(['docker', 'run', '-d', '--name', 'komari-agent-smoke',
+                '--network', 'container:komari-smoke', 'komari-agent:test',
+                '-e', BASE, '-t', node['token'], '--disable-auto-update',
+                '--disable-web-ssh'], check=True, stdout=subprocess.DEVNULL)
+try:
+    for attempt in range(60):
+        with request('/api/admin/client/'+node['uuid'], headers={'Cookie': cookie}) as response:
+            info = json.load(response)
+        if info.get('cpu_name') or info.get('os'):
+            break
+        time.sleep(1)
+    else:
+        raise AssertionError('Agent did not report basic information')
+finally:
+    subprocess.run(['docker', 'rm', '-f', 'komari-agent-smoke'], check=False, stdout=subprocess.DEVNULL)
 print('Docker smoke checks passed: UI, login, authorization, origin rejection, body limit, persistent login')
