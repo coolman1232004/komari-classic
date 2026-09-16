@@ -7,9 +7,16 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: docker-check-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   docker:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -35,4 +42,6 @@ jobs:
         run: docker run --rm --entrypoint sh komari-agent:test -c 'test -s /etc/ssl/certs/ca-certificates.crt && test -f /.komari-agent-container'
       - name: Cleanup
         if: always()
-        run: docker rm -f komari-smoke || true
+        run: |
+          if [ "${{ job.status }}" != "success" ]; then docker logs komari-smoke || true; fi
+          docker rm -f komari-smoke || true

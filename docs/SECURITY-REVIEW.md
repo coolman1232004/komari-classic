@@ -44,4 +44,8 @@ Docker base-image tags and operating-system package repositories still receive u
 
 ## Validation
 
+The initial npm audit reported 12 advisories (9 high, 2 moderate, 1 low). Resolving fixes within existing package ranges reduced the audit to zero. Go security updates include gRPC 1.83.2, go-jose 4.1.4, x/crypto 0.56.0, x/net 0.58.0 (server), x/image 0.45.0 and the agent's xz 0.5.15, plus their required transitive updates. The Go minimum is now 1.26; source Docker builds use 1.26.8.
+
+The legacy non-container updater imports the deprecated x/crypto/openpgp package through go-github-selfupdate. Advisory GO-2026-5932 has no fixed version. The scanner's reported traces here are package initialization, not a demonstrated exploitable OpenPGP operation. Docker binary self-update is blocked before constructing the updater, but the dependency remains in the binary; this is a documented residual warning, not a clean agent dependency audit.
+
 Regression tests cover cross-node reporting rejection, expanded gzip size limits, fixed/chunked HTTP request limits and omission of secrets from logs. GitHub Actions builds source-based server and agent images, runs their tests, checks the embedded UI and login, rejects unauthenticated and cross-origin admin requests, restarts the server and verifies persistence. See the workflow result for the exact tested commit; a workflow definition alone is not a passing test.

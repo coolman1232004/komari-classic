@@ -11,7 +11,7 @@ docker compose logs komari
 
 The server binds to `127.0.0.1:25774` by default. Put an HTTPS reverse proxy in front of it, or access it through an SSH tunnel. To expose the port directly, set `KOMARI_BIND_ADDRESS=0.0.0.0` in `.env` before starting. The proxy must overwrite forwarded scheme headers and forward WebSocket upgrades. Keep API/WebSocket origin checking enabled.
 
-Initial administrator credentials appear in startup logs. Log in, choose a unique password and enable 2FA. Data stays in `./data`. Do not mount the Docker socket or use privileged mode for the server. The Compose configuration drops capabilities, prevents privilege escalation and rotates logs.
+Initial administrator credentials appear in startup logs. Log in, choose a unique password and enable 2FA. Data stays in `./data`. Do not mount the Docker socket or use privileged mode for the server. The Compose configuration prevents privilege escalation and rotates logs. Default Docker filesystem capabilities are retained for compatibility with existing bind-mounted data directories.
 
 This builds the UI and server inside Docker; Go and Node are not required on the host. The existing release Dockerfile remains available for prebuilt release binaries. No prebuilt hardened GHCR image is promised until it has actually been published. The source build works independently of GHCR publishing.
 
