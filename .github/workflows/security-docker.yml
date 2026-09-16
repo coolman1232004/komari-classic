@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: docker-check-${{ github.ref }}
+  group: docker-check-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   docker:
