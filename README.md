@@ -1,3 +1,7 @@
+# Security maintenance branch
+
+The untouched baseline is preserved at commit ea2d85b52ccbb211c144235b9cb51b67d4380cd8. See [Docker installation](docs/DOCKER.md) and [security review](docs/SECURITY-REVIEW.md) for this branch. The original README below describes the baseline publisher and images, not a published hardened release.
+
 # Komari Classic
 
 将以下三个固定版本合并为一个独立仓库，保留原有界面、功能、协议和依赖版本。

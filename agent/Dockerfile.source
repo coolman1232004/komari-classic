@@ -1,0 +1,32 @@
+FROM golang:1.26.8-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG VERSION=1.2.5-fix2-hardening
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/komari-monitor/komari-agent/update.CurrentVersion=${VERSION}" -o /out/komari-agent .
+
+FROM build AS tested
+RUN go test ./... -skip '^(TestICMPPing|TestTCPPing|TestHTTPPing)$'
+
+FROM alpine:3.21
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+
+# Docker buildx 会在构建时自动填充这些变量
+ARG TARGETOS
+ARG TARGETARCH
+
+COPY --from=build /out/komari-agent /app/komari-agent
+
+RUN chmod +x /app/komari-agent
+
+RUN touch /.komari-agent-container
+
+ENTRYPOINT ["/app/komari-agent"]
+# 运行时请指定参数
+# Please specify parameters at runtime.
+# eg: docker run komari-agent -e example.com -t token
+CMD ["--help"]

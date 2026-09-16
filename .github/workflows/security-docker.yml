@@ -1,0 +1,38 @@
+name: Security and Docker regression checks
+on:
+  push:
+    branches: [codex/security-hardening]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and test server image from source
+        run: docker build -f Dockerfile.source --target tested -t komari-tested .
+      - name: Build runtime image
+        run: docker compose build
+      - name: Build and test agent image
+        run: |
+          docker build -f agent/Dockerfile.source --target tested -t agent-tested agent
+          docker build -f agent/Dockerfile.source -t komari-agent:test agent
+          docker run --rm komari-agent:test --help
+      - name: Smoke test Docker installation, authentication and persistence
+        run: |
+          mkdir -p data
+          docker compose run -d --service-ports --name komari-smoke -e ADMIN_USERNAME=ci-admin -e ADMIN_PASSWORD=ci-test-password komari
+          python3 scripts/docker-smoke.py
+          docker restart komari-smoke
+          python3 scripts/docker-smoke.py
+          test -s data/komari.db
+      - name: Validate agent HTTPS trust store
+        run: docker run --rm --entrypoint sh komari-agent:test -c 'test -s /etc/ssl/certs/ca-certificates.crt && test -f /.komari-agent-container'
+      - name: Cleanup
+        if: always()
+        run: docker rm -f komari-smoke || true

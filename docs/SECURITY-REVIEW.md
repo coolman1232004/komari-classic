@@ -1,0 +1,47 @@
+# Komari Classic security maintenance
+
+This branch preserves the 1.2.5-fix2 feature set and adds targeted security and Docker changes. It is not a guarantee that all vulnerabilities have been found. Review date: 2026-09-16.
+
+## Preserved baseline
+
+The untouched baseline is commit `ea2d85b52ccbb211c144235b9cb51b67d4380cd8`, saved in `coolman1232004/komari-classic` before development.
+
+| Component | Upstream tag | Upstream commit | Identical files | Changed upstream files | Omitted upstream files |
+|---|---|---|---:|---:|---:|
+| Server | 1.2.5-fix2 | 2f70b440405c4ea70ff3bcbd87361bbb39dc6f60 | 228 | 10 | 7 |
+| Frontend | 1.2.5-fix2 | 3e76c4c26c55fc3eaa2a8210322e1b2cacb57e52 | 450 | 9 | 6 |
+| Agent | 1.2.60 | 8cd92149a845c12917e42acb1a296c836822758d | 69 | 4 | 6 |
+
+Counts compare SHA-256 of upstream file contents against their mapped paths in Classic. New Classic-only files are not included in these counts. The comparison is against **1.2.5-fix2**, not the earlier plain 1.2.5 release.
+
+All upstream server Go files and dependency locks match. Server differences are documentation, installation and build workflows. The five changed frontend source files change repository/readme links, release queries, installer URLs and agent Docker image names. The agent updater changes its repository and filters release assets by the agent prefix. Thus the monitoring implementation is preserved, but installation/update behavior is changed; the repository is not byte-identical upstream.
+
+## Findings addressed in this branch
+
+* Legacy POST reports trusted a payload UUID over the authenticated agent identity. A compromised agent could submit reports for another node. Reject mismatched UUIDs; retain administrator reporting behavior.
+* HTTP access logs included the full query string, including agent tokens, OAuth codes and terminal OTPs. Log paths without query strings. Existing logs are not changed; rotate any credentials that were exposed through shared old logs.
+* Request bodies, decompressed agent reports and WebSocket messages had unbounded readers. Apply an 8 MiB message limit and a 512 MiB streaming limit for authenticated backup/theme upload routes. Anonymous identity parsing no longer buffers unrelated uploads. Oversized payloads are rejected; unusually large legitimate payloads may need adjustment.
+* Add a 10-second HTTP header deadline and a 60-second idle connection deadline. No global response deadline is imposed on streaming endpoints.
+* Stable container agents could still enter binary self-update. All container updates now happen through Docker image replacement.
+* Agent images lacked an explicit CA certificate package. Install CA certificates and timezone data.
+* Server Docker builds downloaded unpinned cloudflared binaries. Pin version 2026.9.1 and validate the published SHA-256 for each supported architecture.
+
+## Existing protections checked
+
+Login rejects absent/invalid enabled 2FA, and session cookies use HttpOnly, SameSite=Lax and Secure when the request scheme is HTTPS. API origin checks default on; WebSocket upgrades use origin validation by default. These protections correspond to earlier upstream advisories:
+
+* https://github.com/advisories/GHSA-jhmr-57cj-q6g9
+* https://github.com/advisories/GHSA-q355-h244-969h
+* https://github.com/komari-monitor/komari/security/advisories/GHSA-hxjg-93wc-h8p8 (upstream lists 1.2.2 as patched)
+
+Do not disable origin checks or allow arbitrary origins for browser sessions. Use HTTPS and configure your reverse proxy to overwrite forwarded scheme headers. This review does not establish that Nezha vulnerabilities apply to Komari; they are separate implementations.
+
+## Remaining considerations
+
+The baseline uses a fast SHA-256 password hash with a fixed salt. Protect database backups and use a strong unique administrator password plus 2FA. Password-hash migration, rate limiting, complete RPC/session-lifetime review, third-party themes, outbound network features and all transitive dependencies require further assessment. Remote command execution and terminal access are intentional administrator features and make administrator credential protection particularly important.
+
+Docker base-image tags and operating-system package repositories still receive updates. The cloudflared binary and application dependency lockfiles are pinned, but this is not a claim of byte-for-byte reproducible builds. Save a tested final image by digest for deployment and rebuild deliberately for security updates.
+
+## Validation
+
+Regression tests cover cross-node reporting rejection, expanded gzip size limits, fixed/chunked HTTP request limits and omission of secrets from logs. GitHub Actions builds source-based server and agent images, runs their tests, checks the embedded UI and login, rejects unauthenticated and cross-origin admin requests, restarts the server and verifies persistence. See the workflow result for the exact tested commit; a workflow definition alone is not a passing test.

@@ -1,5 +1,7 @@
 FROM alpine:3.21
 
+RUN apk add --no-cache ca-certificates tzdata
+
 WORKDIR /app
 
 # Docker buildx 会在构建时自动填充这些变量
