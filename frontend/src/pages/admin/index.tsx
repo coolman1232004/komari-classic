@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 24339)
+Total output lines: 2764
+
 import {
   quotePowerShellArg,
   quoteShellArg,
@@ -372,10 +375,11 @@ const AutoDiscoverySection = ({
         // 通过 bind mount 持久化该文件，容器更新重建后复用同一身份，避免重复注册。
         // 注意：文件挂载要求宿主机上文件已存在，否则 Docker 会将其创建为目录。
         finalCommand =
+          `docker build -f Dockerfile.source -t komari-classic-agent:1.2.5-fix2-hardening https://github.com/coolman1232004/komari-classic.git#98a06154714f9d65aa3680add5d5c37962537a0c:agent && ` +
           `touch .komari-auto-discovery.json && ` +
           `docker run -d --name komari-agent --restart=always ` +
-          `-v .komari-auto-discovery.json:/app/auto-discovery.json ` +
-          `ghcr.io/coolman1232004/komari-classic-agent:latest ` +
+          `-v "$(pwd)/.komari-auto-discovery.json:/app/auto-discovery.json" ` +
+          `komari-classic-agent:1.2.5-fix2-hardening ` +
           quoteShellArgs(dockerArgs);
         break;
       }
@@ -1456,48 +1460,7 @@ function GenerateCommandButton({ node, settings }: { node: NodeDetail, settings:
     }();
     const token = node.token || "";
     let args = ["-e", host, "-t", token];
-    // 根据安装选项生成参数
-    if (installOptions.disableWebSsh) {
-      args.push("--disable-web-ssh");
-    }
-    if (installOptions.disableAutoUpdate) {
-      args.push("--disable-auto-update");
-    }
-    if (installOptions.ignoreUnsafeCert) {
-      args.push("--ignore-unsafe-cert");
-    }
-    if (installOptions.memoryIncludeCache) {
-      args.push("--memory-include-cache");
-    }
-    if (installOptions.getIpAddrFromNic) {
-      args.push("--get-ip-addr-from-nic");
-    }
-    if (installOptions.enableGpu) {
-      args.push("--gpu");
-    }
-    const ghproxy = installOptions.ghproxy.trim();
-    if (enableGhproxy && ghproxy) {
-      const finalUrl = (
-        ghproxy.startsWith("http")
-          ? ghproxy
-          : `http://${ghproxy}`
-      ).replace(/\/+$/, "");
-      args.push(`--install-ghproxy`);
-      args.push(finalUrl);
-    }
-    const installDir = installOptions.dir.trim();
-    if (enableCustomDir && installDir) {
-      args.push(`--install-dir`);
-      args.push(installDir);
-    }
-    const serviceName = installOptions.serviceName.trim();
-    if (enableCustomServiceName && serviceName) {
-      args.push(`--install-service-name`);
-      args.push(serviceName);
-    }
-    const includeNics = installOptions.includeNics.trim();
-    if (enableIncludeNics && includeNics) {
-      args.push(`--include-nics`);
+    // 根据安装选项…339 tokens truncated…);
       args.push(includeNics);
     }
     const excludeNics = installOptions.excludeNics.trim();
@@ -1577,8 +1540,9 @@ function GenerateCommandButton({ node, settings }: { node: NodeDetail, settings:
           dockerArgs.push(args[i]);
         }
         finalCommand =
+          `docker build -f Dockerfile.source -t komari-classic-agent:1.2.5-fix2-hardening https://github.com/coolman1232004/komari-classic.git#98a06154714f9d65aa3680add5d5c37962537a0c:agent && ` +
           `docker run -d --name komari-agent --restart=always ` +
-          `ghcr.io/coolman1232004/komari-classic-agent:latest ` +
+          `komari-classic-agent:1.2.5-fix2-hardening ` +
           quoteShellArgs(dockerArgs);
         break;
       }
