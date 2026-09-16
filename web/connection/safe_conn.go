@@ -1,10 +1,12 @@
 package connection
 
 import (
+	"encoding/json"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/komari-monitor/komari/web/security"
 )
 
 type SafeConn struct {
@@ -39,10 +41,24 @@ func (sc *SafeConn) Close() error {
 	return sc.conn.Close()
 }
 func (sc *SafeConn) ReadMessage() (int, []byte, error) {
-	return sc.conn.ReadMessage()
+	messageType, reader, err := sc.conn.NextReader()
+	if err != nil {
+		return messageType, nil, err
+	}
+	// Gorilla's frame limit applies before permessage-deflate decompression.
+	// Bound the expanded stream too, before allocating or decoding JSON.
+	data, err := security.ReadLimited(reader, security.MaxMessageBytes)
+	if err != nil {
+		sc.conn.Close()
+	}
+	return messageType, data, err
 }
 func (sc *SafeConn) ReadJSON(v interface{}) error {
-	return sc.conn.ReadJSON(v)
+	_, data, err := sc.ReadMessage()
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, v)
 }
 func (sc *SafeConn) SetReadDeadline(t time.Time) error {
 	return sc.conn.SetReadDeadline(t)
