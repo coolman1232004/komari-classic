@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	agent_runtime "github.com/komari-monitor/komari/web/agent"
 	"github.com/komari-monitor/komari/web/api"
 	"github.com/komari-monitor/komari/web/connection"
+	"github.com/komari-monitor/komari/web/security"
 )
 
 func readMaybeCompressedBody(r *http.Request) ([]byte, error) {
@@ -28,9 +28,9 @@ func readMaybeCompressedBody(r *http.Request) ([]byte, error) {
 			return nil, err
 		}
 		defer zr.Close()
-		return io.ReadAll(zr)
+		return security.ReadLimited(zr, security.MaxMessageBytes)
 	}
-	return io.ReadAll(r.Body)
+	return security.ReadLimited(r.Body, security.MaxMessageBytes)
 }
 
 func bindV2Params[T any](raw any, target *T) error {

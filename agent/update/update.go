@@ -20,7 +20,7 @@ import (
 
 var (
 	CurrentVersion string = "0.0.1"
-	Repo           string = "kadidalax/komari-classic"
+	Repo           string = "coolman1232004/komari-classic"
 )
 
 const (
@@ -318,6 +318,10 @@ func checkAndUpdateSnapshot(updater *selfupdate.Updater) error {
 
 // 检查更新并执行自动更新
 func CheckAndUpdate() error {
+	if isContainerAgent() {
+		log.Println("Container agent: update by rebuilding or pulling the Docker image")
+		return nil
+	}
 	log.Println("Checking update...")
 
 	http.DefaultClient = dnsresolver.GetHTTPClient(60 * time.Second)

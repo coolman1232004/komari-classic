@@ -119,11 +119,14 @@ func UploadReport(c *gin.Context) {
 		return
 	}
 	// 优先使用 body 中的 UUID，若为空则从中间件注入的上下文中获取
-	uuid := report.UUID
-	if uuid == "" {
-		if v, ok := c.Get("client_uuid"); ok {
-			uuid, _ = v.(string)
-		}
+	uuid := c.GetString("client_uuid")
+	if uuid != "" && report.UUID != "" && report.UUID != uuid {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Report UUID does not match authenticated client"})
+		return
+	}
+	// Administrators retain the existing ability to submit a report for a node.
+	if uuid == "" && api.GetRole(c) == api.RoleAdmin {
+		uuid = report.UUID
 	}
 	if uuid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "UUID is required"})
