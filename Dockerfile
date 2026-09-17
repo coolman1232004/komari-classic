@@ -16,7 +16,9 @@ WORKDIR /app
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN apk add --no-cache ca-certificates curl tzdata
+# Upgrade packages already present in the base; reject mirrors missing the security fix.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' ca-certificates curl tzdata
 
 COPY --from=cloudflared-build /out/cloudflared /usr/local/bin/cloudflared
 COPY --from=cloudflared-build /src/cloudflared/LICENSE /usr/share/licenses/cloudflared/LICENSE

@@ -1,6 +1,8 @@
 FROM alpine:3.24
 
-RUN apk add --no-cache ca-certificates tzdata
+# Upgrade packages already present in the base; reject mirrors missing the security fix.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' ca-certificates tzdata
 
 WORKDIR /app
 

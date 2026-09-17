@@ -1,4 +1,4 @@
-# Extended security review — 2026-09-17
+# Extended security review — 2026-09-18
 
 This is a source review with regression tests and dependency/container scanning, not a certification or a promise of zero vulnerabilities. The untouched upstream-derived baseline remains on `main`; changes are reviewed in PR #1. Deployment on the owner's actual VPS has not been inspected.
 
@@ -33,7 +33,7 @@ Use HTTPS. The reverse proxy must overwrite forwarded scheme headers, block dire
 
 ## Verification records
 
-Local full server `go test ./...` passed on Windows with Go 1.26.8 and SQLite enabled; follow-up tests exercise real WebSocket forwarding/revocation. Docker's `tested` build target reruns the full server suite on Linux. The Docker workflow builds and starts the server and agent on AMD64 and ARM64, checks login/embedded UI/persistence/password migration and scans the resulting AMD64 images with Trivy 0.73.0. The AMD64 job also runs the race detector on changed connection, RPC and compatibility packages; the Windows race runtime could not start in the local environment. **Only a completed workflow result establishes that a particular commit passed.** Image reports include unfixed findings and fail CI on HIGH/CRITICAL severity. Lower/unknown-severity findings remain visible and require review; a passing job is not an automatic clean bill of health.
+Local full server `go test ./...` passed on Windows with Go 1.26.8 and SQLite enabled; follow-up tests exercise real WebSocket forwarding/revocation. Docker's `tested` build target reruns the full server suite on Linux. The Docker workflow builds and starts the server and agent on AMD64 and ARM64, checks login/embedded UI/persistence/password migration and scans the resulting AMD64 and ARM64 images with Trivy 0.73.0. The AMD64 job also runs the race detector on changed connection, RPC and compatibility packages; the Windows race runtime could not start in the local environment. **Only a completed workflow result establishes that a particular commit passed.** Image reports include unfixed findings and fail CI on HIGH/CRITICAL severity. Lower/unknown-severity findings remain visible and require review; a passing job is not an automatic clean bill of health.
 
 Prior dependency scan results and upstream comparison are in [SECURITY-REVIEW.md](SECURITY-REVIEW.md). Current source/container scan findings and final run links are recorded in the PR. Static dependency presence does not by itself prove an exploitable call path, and a zero count does not cover unknown vulnerabilities. Keep monitoring security advisories and deliberately rebuild tested images; permanently freezing vulnerable dependencies is incompatible with long-term security.
 
@@ -46,3 +46,5 @@ The first extended image scan found 8 server findings: one unused OpenPGP module
 Runtime images move from Alpine 3.21 (main support ends 2026-11-01) to Alpine 3.24 (main support through 2028-06-01), per https://alpinelinux.org/releases/. This extends the maintenance window but still requires deliberate patch rebuilds.
 
 Nezha compatibility now requires creating the node in Komari first, then configuring its UUID and token in the compatible agent. Existing empty-token auto-created records cannot authenticate; replace their credentials through the administrator UI. Its optional gRPC listener uses plaintext transport: keep it disabled unless needed, or put it behind TLS/VPN/firewall restrictions. The default Compose file does not publish that listener. This finding concerns Komari's compatibility implementation, not a claim about a particular Nezha upstream CVE.
+
+The next scan caught OpenSSL 3.5.7-r0 inherited from Alpine 3.24: both libcrypto3 and libssl3 need 3.5.8-r0, including the HIGH CVE-2026-14456. Adding packages alone did not upgrade libraries already in the base. All four runtime Dockerfiles now upgrade installed packages and explicitly require those patched minimum versions; official x86_64 and aarch64 package indexes both provided 3.5.8-r0 on 2026-09-18. The image scanner now runs on both architectures and retains separate reports. Final CI results remain authoritative.
