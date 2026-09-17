@@ -64,7 +64,8 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (stri
 	}
 
 	elapsed := time.Since(begin)
-	sql, rows := fc()
+	_, rows := fc()
+	sql := "[SQL text redacted]"
 
 	fileWithLineNum := utils.FileWithLineNum()
 
@@ -73,7 +74,7 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (stri
 	switch {
 	case err != nil && l.LogLevel >= gormlogger.Error && (!errors.Is(err, gorm.ErrRecordNotFound) || !l.IgnoreRecordNotFoundError):
 		msg := fmt.Sprintf("[%.3fms] [rows:%d] %s | ERROR: %v %s",
-			float64(elapsed.Nanoseconds())/1e6, rows, sql, err, Gray("(%s)", fileWithLineNum))
+			float64(elapsed.Nanoseconds())/1e6, rows, sql, "database operation failed", Gray("(%s)", fileWithLineNum))
 		r := slog.NewRecord(time.Now(), slog.LevelError, msg, 0)
 		r.AddAttrs(slog.String("_group", "GORM"))
 		handler.Handle(ctx, r)

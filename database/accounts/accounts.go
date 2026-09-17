@@ -10,6 +10,7 @@ import (
 	"github.com/komari-monitor/komari/utils"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // CheckPassword 检查密码是否正确
@@ -47,15 +48,17 @@ func CheckPassword(username, passwd string) (uuid string, success bool) {
 
 // ForceResetPassword 强制重置用户密码
 func ForceResetPassword(username, passwd string) (err error) {
-	db := dbcore.GetDBInstance()
-	result := db.Model(&models.User{}).Where("username = ?", username).Update("passwd", hashPasswd(passwd))
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("无法找到用户名")
-	}
-	return nil
+	hashed := hashPasswd(passwd)
+	return dbcore.GetDBInstance().Transaction(func(db *gorm.DB) error {
+		result := db.Model(&models.User{}).Where("username = ?", username).Update("passwd", hashed)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("user not found")
+		}
+		return db.Where("uuid IN (?)", db.Model(&models.User{}).Select("uuid").Where("username = ?", username)).Delete(&models.Session{}).Error
+	})
 }
 
 func CreateAccount(username, passwd string) (user models.User, err error) {
@@ -74,12 +77,12 @@ func CreateAccount(username, passwd string) (user models.User, err error) {
 }
 
 func DeleteAccountByUsername(username string) (err error) {
-	db := dbcore.GetDBInstance()
-	err = db.Where("username = ?", username).Delete(&models.User{}).Error
-	if err != nil {
-		return err
-	}
-	return nil
+	return dbcore.GetDBInstance().Transaction(func(db *gorm.DB) error {
+		if err := db.Where("uuid IN (?)", db.Model(&models.User{}).Select("uuid").Where("username = ?", username)).Delete(&models.Session{}).Error; err != nil {
+			return err
+		}
+		return db.Where("username = ?", username).Delete(&models.User{}).Error
+	})
 }
 
 // 创建默认管理员账户，使用环境变量 ADMIN_USERNAME 作为用户名，环境变量 ADMIN_PASSWORD 作为密码

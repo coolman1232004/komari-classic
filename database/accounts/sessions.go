@@ -79,13 +79,16 @@ func GetSession(session string) (uuid string, err error) {
 		return "", errors.New("session expired")
 	}
 
+	if _, err := GetUserByUUID(sessionRecord.UUID); err != nil {
+		return "", err
+	}
 	return sessionRecord.UUID, nil
 }
 
 func GetUserBySession(session string) (models.User, error) {
 	db := dbcore.GetDBInstance()
 	var sessionRecord models.Session
-	err := db.Where("session = ?", session).First(&sessionRecord).Error
+	err := db.Where("session = ? AND expires > ?", session, time.Now()).First(&sessionRecord).Error
 	if err != nil {
 		return models.User{}, err
 	}

@@ -1,7 +1,10 @@
 package accounts
 
 import (
+	"fmt"
 	"image"
+	"sync"
+	"time"
 
 	"github.com/komari-monitor/komari/database/dbcore"
 	"github.com/komari-monitor/komari/database/models"
@@ -29,10 +32,42 @@ func Generate2Fa() (string, image.Image, error) {
 
 func Enable2Fa(uuid, secret string) error {
 	db := dbcore.GetDBInstance()
-	return db.Model(&models.User{}).Where("uuid = ?", uuid).Update("two_factor", secret).Error
+	result := db.Model(&models.User{}).Where("uuid = ? AND (two_factor = ? OR two_factor IS NULL)", uuid, "").Update("two_factor", secret)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("2FA already enabled or user missing")
+	}
+	return nil
 }
 
+var twoFAMutex sync.Mutex
+var twoFAAttempts = make(map[string]struct {
+	count  int
+	expiry time.Time
+})
+
 func Verify2Fa(uuid, code string) (bool, error) {
+	twoFAMutex.Lock()
+	now := time.Now()
+	for id, entry := range twoFAAttempts {
+		if !now.Before(entry.expiry) {
+			delete(twoFAAttempts, id)
+		}
+	}
+	entry := twoFAAttempts[uuid]
+	if entry.count >= 10 || (entry.count == 0 && len(twoFAAttempts) >= 4096) {
+		twoFAMutex.Unlock()
+		return false, fmt.Errorf("too many 2FA attempts; wait five minutes")
+	}
+	if entry.count == 0 {
+		entry.expiry = now.Add(5 * time.Minute)
+	}
+	entry.count++
+	twoFAAttempts[uuid] = entry
+	twoFAMutex.Unlock()
+
 	db := dbcore.GetDBInstance()
 	var user models.User
 	err := db.Where("uuid = ?", uuid).First(&user).Error

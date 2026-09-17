@@ -43,6 +43,21 @@ jobs:
           test -s data/komari.db
       - name: Validate agent HTTPS trust store
         run: docker run --rm --entrypoint sh komari-agent:test -c 'test -s /etc/ssl/certs/ca-certificates.crt && test -f /.komari-agent-container'
+      - name: Scan built images for known vulnerabilities
+        if: matrix.runner == 'ubuntu-latest'
+        run: |
+          mkdir -p image-audit
+          docker save komari-classic:1.2.5-fix2-hardening -o image-audit/server.tar
+          docker save komari-agent:test -o image-audit/agent.tar
+          for component in server agent; do
+            docker run --rm -v "$PWD/image-audit:/scan" ghcr.io/aquasecurity/trivy:0.73.0 image --scanners vuln --input /scan/$component.tar --format json --output /scan/$component.json
+          done
+          python3 scripts/image-audit-summary.py
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.runner == 'ubuntu-latest'
+        with:
+          name: image-vulnerability-reports
+          path: image-audit/*.json
       - name: Cleanup
         if: always()
         run: |

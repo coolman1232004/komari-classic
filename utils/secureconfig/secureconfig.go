@@ -11,9 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const keyFilePath = "./data/secret.key"
+
+var keyMutex sync.Mutex
 
 func EncryptString(plaintext string) (string, error) {
 	key, err := loadOrCreateKey()
@@ -80,6 +83,8 @@ func DecryptString(ciphertext string) (string, error) {
 }
 
 func loadOrCreateKey() ([]byte, error) {
+	keyMutex.Lock()
+	defer keyMutex.Unlock()
 	if env := strings.TrimSpace(os.Getenv("KOMARI_SECRET_KEY")); env != "" {
 		return normalizeKey(env)
 	}

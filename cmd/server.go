@@ -121,6 +121,7 @@ func RunServer() {
 	}
 
 	r := gin.New()
+	r.Use(security.SecurityHeaders())
 	r.Use(logutil.GinLogger())
 	r.Use(logutil.GinRecovery())
 

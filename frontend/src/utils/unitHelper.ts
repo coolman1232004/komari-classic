@@ -69,11 +69,12 @@ export function stringToBytes(str: string): number {
 
   try {
     // 3. 计算数值部分
-    // 使用 Function 构造函数来安全地评估可能包含乘法或科学记数法的表达式
-    // 注意：这仍然假设输入源是可信的，因为它能执行简单的数学运算
-    const value = new Function(`return ${numericPart}`)();
+    // 只解析数字、科学记数法及乘法，不执行输入内容。
+    const factors = numericPart.split("*");
+    if (factors.length > 32 || !factors.every(part => /^[+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/.test(part))) return 0;
+    const value = factors.reduce((product, part) => product * Number(part), 1);
 
-    if (isNaN(value)) {
+    if (!Number.isFinite(value) || !Number.isFinite(value * units[unit]) || value < 0) {
       return 0;
     }
 
