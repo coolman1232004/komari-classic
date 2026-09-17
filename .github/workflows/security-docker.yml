@@ -23,6 +23,9 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - name: Build and test server image from source
         run: docker build -f Dockerfile.source --target tested -t komari-tested .
+      - name: Check concurrent connection handling
+        if: matrix.runner == 'ubuntu-latest'
+        run: docker run --rm komari-tested go test -race ./web/api/terminal ./web/connection ./web/api ./web/nezha ./web/rpc/jsonrpc
       - name: Build runtime image
         run: docker compose build
       - name: Build and test agent image
