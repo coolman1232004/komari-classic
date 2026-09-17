@@ -114,7 +114,8 @@ func GetAppLocation() *time.Location {
 		} else {
 			appLocation = loc
 		}
-		time.Local = appLocation
+		// Keep the process-wide time.Local immutable: unrelated goroutines call
+		// time.Now concurrently. Database/JSON conversions use appLocation explicitly.
 		log.Printf("Application timezone is set to '%s'.", appLocation.String())
 	})
 	return appLocation

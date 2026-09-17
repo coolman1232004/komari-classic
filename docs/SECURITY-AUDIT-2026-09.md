@@ -39,6 +39,8 @@ Prior dependency scan results and upstream comparison are in [SECURITY-REVIEW.md
 
 ## Container follow-up
 
+The Linux race detector found lazy timezone initialization writing `time.Local` concurrently with `time.Now`. Remove that global mutation; database and JSON conversions retain their explicit application timezone. The terminal regression exercises the original race. Theme changes now require POST, including the bundled frontend, so cookie-bearing navigations cannot change the active theme even when browsers omit Origin/Fetch Metadata. External integrations using GET for theme changes must switch to POST.
+
 The first extended image scan found 8 server findings: one unused OpenPGP module advisory in Komari and seven findings in the bundled official cloudflared binary (three high, three medium, one unknown). The agent image had zero findings. The official latest release was still 2026.9.1, so Docker now builds that exact source with locked patched dependencies; see `third_party/cloudflared/README.md`. Final image scans must confirm the resulting status. No blanket ignore list is used.
 
 Runtime images move from Alpine 3.21 (main support ends 2026-11-01) to Alpine 3.24 (main support through 2028-06-01), per https://alpinelinux.org/releases/. This extends the maintenance window but still requires deliberate patch rebuilds.

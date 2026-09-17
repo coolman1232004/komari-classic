@@ -142,6 +142,11 @@ func DeleteTheme(c *gin.Context) {
 
 // SetTheme 设置主题
 func SetTheme(c *gin.Context) {
+	if c.Request.Method != http.MethodPost {
+		c.Header("Allow", http.MethodPost)
+		c.AbortWithStatus(http.StatusMethodNotAllowed)
+		return
+	}
 	themeName := c.Query("theme")
 	if themeName == "" {
 		api.RespondError(c, http.StatusBadRequest, "主题名称不能为空")

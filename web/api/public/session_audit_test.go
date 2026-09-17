@@ -56,3 +56,18 @@ func TestCannotReplaceEnabledTwoFactor(t *testing.T) {
 		t.Fatalf("expected conflict, got %d", w.Code)
 	}
 }
+
+func TestThemeChangeRequiresPost(t *testing.T) {
+	r := gin.New()
+	r.Any("/theme", admin.SetTheme)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/theme?theme=default", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET changed theme: %d", w.Code)
+	}
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/theme?theme=default", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST cannot change theme: %d %s", w.Code, w.Body.String())
+	}
+}
