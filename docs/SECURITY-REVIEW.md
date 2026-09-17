@@ -24,7 +24,7 @@ All upstream server Go files and dependency locks match. Server differences are 
 * Add a 10-second HTTP header deadline and a 60-second idle connection deadline. No global response deadline is imposed on streaming endpoints.
 * Stable container agents could still enter binary self-update. All container updates now happen through Docker image replacement.
 * Agent images lacked an explicit CA certificate package. Install CA certificates and timezone data.
-* Server Docker builds downloaded unpinned cloudflared binaries. Pin version 2026.9.1 and validate the published SHA-256 for each supported architecture.
+* Server Docker builds downloaded unpinned cloudflared binaries. Pin 2026.9.1 source by commit and archive checksum, and rebuild with patched, locked dependencies (see the extended audit).
 
 ## Existing protections checked
 
@@ -42,9 +42,9 @@ The follow-up adds Argon2id password storage (19 MiB, two iterations, one lane a
 
 Password login is limited to 10 attempts per account per five minutes, 20 per socket peer per minute and 60 globally per minute. Password and 2FA failures both consume this budget; successful attempts do not reset it. HTTP 429 includes Retry-After. In-memory limits reset on process restart and are per server instance. Socket peers, not user-supplied proxy headers, identify the peer; users behind a reverse proxy share its peer allowance. The bounded limiter fails closed at capacity. This can temporarily restrict legitimate logins during attack, so keep access to the host/CLI recovery path. Login bodies are limited to 16 KiB; usernames/passwords to 256/4096 bytes.
 
-Protect database backups and use a strong unique administrator password plus 2FA. A complete RPC/session-lifetime review, third-party themes and outbound network features still require further assessment. Remote command execution and terminal access are intentional administrator features and make administrator credential protection particularly important.
+Protect database backups and use a strong unique administrator password plus 2FA. An extended RPC/session, archive, outbound download and compatibility-service review is documented in [SECURITY-AUDIT-2026-09.md](SECURITY-AUDIT-2026-09.md); its limitations still apply. Remote command execution and terminal access are intentional administrator features and make administrator credential protection particularly important.
 
-Docker base-image tags and operating-system package repositories still receive updates. The cloudflared binary and application dependency lockfiles are pinned, but this is not a claim of byte-for-byte reproducible builds. Save a tested final image by digest for deployment and rebuild deliberately for security updates.
+Docker base-image tags and operating-system package repositories still receive updates. The cloudflared source archive and application dependency lockfiles are pinned, but this is not a claim of byte-for-byte reproducible builds. Save a tested final image by digest for deployment and rebuild deliberately for security updates.
 
 ## Validation
 

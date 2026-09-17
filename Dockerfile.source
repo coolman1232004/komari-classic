@@ -1,4 +1,14 @@
 # syntax=docker/dockerfile:1
+FROM golang:1.26.8-alpine AS cloudflared-build
+RUN apk add --no-cache curl ca-certificates
+WORKDIR /src/cloudflared
+# Official 2026.9.1 source, pinned by commit and archive checksum.
+RUN curl -fsSL https://codeload.github.com/cloudflare/cloudflared/tar.gz/f11dea9cb7079e90a982c1a2d5548ab40847fdcf -o /tmp/cloudflared.tar.gz \
+    && echo "d9c67e530861b212529fe67f4d7fe04335dc80f07026370a57c46fa611f7730f  /tmp/cloudflared.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/cloudflared.tar.gz --strip-components=1
+COPY third_party/cloudflared/go.mod third_party/cloudflared/go.sum ./
+RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w -X main.Version=2026.9.1-classic-security -X github.com/cloudflare/cloudflared/cmd/cloudflared/updater.BuiltForPackageManager=komari-classic" -o /out/cloudflared ./cmd/cloudflared
+
 FROM node:22-bookworm-slim AS frontend
 WORKDIR /src/frontend
 COPY frontend/package*.json ./
@@ -22,7 +32,7 @@ RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w -X github.com/komari-monito
 FROM build AS tested
 RUN go test ./...
 
-FROM alpine:3.21
+FROM alpine:3.24
 
 WORKDIR /app
 
@@ -32,18 +42,9 @@ ARG TARGETARCH
 
 RUN apk add --no-cache ca-certificates curl tzdata
 
-ARG CLOUDFLARED_VERSION=2026.9.1
-RUN set -eux; \
-    case "${TARGETARCH}" in \
-      amd64) cloudflared_sha="03f1f25d1cc93b9ad6c60569d44060bc4f17ed97075760ed8cfca4b12dcd68cc" ;; \
-      386) cloudflared_sha="5d66134cf7646cb98f33aeee7bcc8b97d8feacd76db279f5903f9585226e0922" ;; \
-      arm64) cloudflared_sha="3d97437c71848bd8df68041e12436b484a661d95073ea1937f01a845ce88faa3" ;; \
-      arm) cloudflared_sha="093ffa3638ab2b636de63c43a8c68f96a69cf71f9699dd8277a91b160b0f4fc0" ;; \
-      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${TARGETARCH}" -o /usr/local/bin/cloudflared; \
-    echo "${cloudflared_sha}  /usr/local/bin/cloudflared" | sha256sum -c -; \
-    chmod +x /usr/local/bin/cloudflared
+COPY --from=cloudflared-build /out/cloudflared /usr/local/bin/cloudflared
+COPY --from=cloudflared-build /src/cloudflared/LICENSE /usr/share/licenses/cloudflared/LICENSE
+RUN cloudflared --version
 
 COPY --from=build /out/komari /app/komari
 

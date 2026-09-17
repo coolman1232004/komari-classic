@@ -9,7 +9,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/komari-monito
 FROM build AS tested
 RUN go test ./... -skip '^(TestICMPPing|TestTCPPing|TestHTTPPing)$'
 
-FROM alpine:3.21
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates tzdata
 

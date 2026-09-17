@@ -5,11 +5,13 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/komari-monitor/komari/database/accounts"
 	"github.com/komari-monitor/komari/database/dbcore"
 	"github.com/komari-monitor/komari/database/models"
+	"github.com/komari-monitor/komari/pkg/config"
+	"github.com/komari-monitor/komari/pkg/rpc"
 	"github.com/komari-monitor/komari/protocol/v1"
 	agent_runtime "github.com/komari-monitor/komari/web/agent"
+	"github.com/komari-monitor/komari/web/connection"
 )
 
 func GetClients(c *gin.Context) {
@@ -19,35 +21,13 @@ func GetClients(c *gin.Context) {
 		return
 	}
 	// Upgrade the HTTP connection to a WebSocket connection
-	conn, err := UpgradeWebSocket(c)
+	raw, err := UpgradeWebSocket(c)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Failed to upgrade to WebSocket." + err.Error()})
 		return
 	}
+	conn := connection.NewSafeConn(raw)
 	defer conn.Close()
-
-	// 初始化用户信息
-	var (
-		isLogin    = false
-		hiddenMap  = map[string]bool{}
-		session, _ = c.Cookie("session_token")
-	)
-
-	// 登录状态检查
-	_, err = accounts.GetUserBySession(session)
-	if err == nil {
-		isLogin = true
-	}
-
-	// 仅在未登录时需要 Hidden 信息做过滤
-	if !isLogin {
-		var hiddenClients []models.Client
-		db := dbcore.GetDBInstance()
-		_ = db.Select("uuid").Where("hidden = ?", true).Find(&hiddenClients).Error
-		for _, cli := range hiddenClients {
-			hiddenMap[cli.UUID] = true
-		}
-	}
 
 	// 请求
 	for {
@@ -64,6 +44,21 @@ func GetClients(c *gin.Context) {
 			//log.Println("Error reading message:", err)
 			return
 		}
+		principal := IdentifyPrincipal(c)
+		isLogin := principal.HasRole(rpc.RoleAdmin)
+		if !CanReadLiveData(c) {
+			return
+		}
+		visible := map[string]bool{}
+		if !isLogin {
+			var nodes []models.Client
+			if err := dbcore.GetDBInstance().Select("uuid", "hidden").Find(&nodes).Error; err != nil {
+				return
+			}
+			for _, node := range nodes {
+				visible[node.UUID] = !node.Hidden
+			}
+		}
 		message := string(data)
 
 		uuID := ""
@@ -78,7 +73,7 @@ func GetClients(c *gin.Context) {
 
 		// 在线客户端uuid列表（WebSocket 与非 WebSocket）
 		for _, key := range agent_runtime.GetAllOnlineUUIDs() {
-			if !isLogin && hiddenMap[key] {
+			if !isLogin && !visible[key] {
 				continue
 			}
 			if uuID != "" && key != uuID {
@@ -89,18 +84,19 @@ func GetClients(c *gin.Context) {
 
 		//过往节点数据信息
 		for key, report := range agent_runtime.GetLatestReport() {
-			if !isLogin && hiddenMap[key] {
+			if !isLogin && !visible[key] {
 				continue
 			}
 			if uuID != "" && key != uuID {
 				continue
 			}
 
-			report.UUID = "" // 不暴露 uuid
-			if report.CPU.Usage == 0 {
-				report.CPU.Usage = 0.01
+			copyReport := *report
+			copyReport.UUID = "" // 不暴露 uuid
+			if copyReport.CPU.Usage == 0 {
+				copyReport.CPU.Usage = 0.01
 			}
-			resp.Data[key] = *report
+			resp.Data[key] = copyReport
 		}
 
 		err = conn.WriteJSON(gin.H{"status": "success", "data": resp})
@@ -108,4 +104,13 @@ func GetClients(c *gin.Context) {
 			return
 		}
 	}
+}
+
+// Re-evaluate private-site and share/session credentials while streaming.
+func CanReadLiveData(c *gin.Context) bool {
+	private, err := config.GetAs[bool](config.PrivateSiteKey, false)
+	if err != nil {
+		return false
+	}
+	return !private || IdentifyPrincipal(c).Type != rpc.PrincipalAnonymous || hasTempAccess(c)
 }
