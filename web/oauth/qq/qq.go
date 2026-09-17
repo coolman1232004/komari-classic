@@ -24,6 +24,14 @@ func (q *QQ) GetConfiguration() factory.Configuration {
 
 func (q *QQ) GetAuthorizationURL(redirectURI string) (string, string) {
 	state := utils.GenerateRandomString(16)
+	redirect, err := url.Parse(redirectURI)
+	if err != nil {
+		return "", state
+	}
+	values := redirect.Query()
+	values.Set("state", state)
+	redirect.RawQuery = values.Encode()
+	redirectURI = redirect.String()
 
 	// 构建请求QQ聚合登录平台的URL
 	requestURL := fmt.Sprintf(
@@ -36,7 +44,7 @@ func (q *QQ) GetAuthorizationURL(redirectURI string) (string, string) {
 	)
 
 	// 向聚合登录平台发送请求
-	resp, err := http.Get(requestURL)
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Get(requestURL)
 	if err != nil {
 		// 如果请求失败，返回错误信息
 		return "", state
@@ -44,7 +52,7 @@ func (q *QQ) GetAuthorizationURL(redirectURI string) (string, string) {
 	defer resp.Body.Close()
 
 	// 读取响应内容
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		return "", state
 	}
@@ -93,6 +101,8 @@ func (q *QQ) OnCallback(ctx *gin.Context, state string, query map[string]string,
 		return factory.OidcCallback{}, fmt.Errorf("invalid state")
 	}
 
+	q.stateCache.Delete(state)
+
 	// 检查是否提供了Authorization Code
 	if code == "" {
 		return factory.OidcCallback{}, fmt.Errorf("no authorization code provided")
@@ -109,7 +119,7 @@ func (q *QQ) OnCallback(ctx *gin.Context, state string, query map[string]string,
 		url.QueryEscape(code),
 	)
 
-	resp, err := http.Get(callbackURL)
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Get(callbackURL)
 	if err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to get user info: %v", err)
 	}
@@ -121,7 +131,7 @@ func (q *QQ) OnCallback(ctx *gin.Context, state string, query map[string]string,
 	}
 
 	// 读取响应
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to read response: %v", err)
 	}

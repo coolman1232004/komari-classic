@@ -41,6 +41,10 @@ func CorsMiddleware(initialEnabled bool, initialAllowedOrigins string) gin.Handl
 			return
 		}
 
+		if c.GetHeader("Sec-Fetch-Site") == "cross-site" && !IsAPIKeyRequest(c.Request) && c.Request.URL.Path != "/api/oauth_callback" && !OriginInAllowlist(c.GetHeader("Origin"), corsAllowedOrigins) && !IsAuthorizationPreflight(c.Request) {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
 		origin := c.GetHeader("Origin")
 		allowOrigin := ""
 		if origin != "" && (IsAPIKeyRequest(c.Request) ||

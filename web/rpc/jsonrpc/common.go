@@ -270,7 +270,6 @@ func getNodes(ctx context.Context, req *rpc.JsonRpcRequest) (any, *rpc.JsonRpcEr
 	return nodeMap, nil
 }
 
-
 func getPublicInfo(_ context.Context, _ *rpc.JsonRpcRequest) (any, *rpc.JsonRpcError) {
 	info, err := database.GetPublicInfo()
 	if err != nil {
@@ -443,11 +442,7 @@ func getMe(ctx context.Context, _ *rpc.JsonRpcRequest) (any, *rpc.JsonRpcError) 
 		resp.SSOId = "client"
 		resp.SSOType = "client"
 		resp.Username = "client"
-		resp.UUID = meta.ClientToken
-		client, err := clients.GetClientUUIDByToken(meta.ClientToken)
-		if err != nil {
-			resp.UUID = client
-		}
+		resp.UUID = meta.ClientUUID
 		return resp, nil
 	default:
 		resp.LoggedIn = false

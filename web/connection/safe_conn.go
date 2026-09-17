@@ -26,18 +26,18 @@ func NewSafeConn(conn *websocket.Conn) *SafeConn {
 func (sc *SafeConn) WriteMessage(messageType int, data []byte) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	sc.conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 	return sc.conn.WriteMessage(messageType, data)
 }
 
 func (sc *SafeConn) WriteJSON(v interface{}) error {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	sc.conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 	return sc.conn.WriteJSON(v)
 }
 
 func (sc *SafeConn) Close() error {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
 	return sc.conn.Close()
 }
 func (sc *SafeConn) ReadMessage() (int, []byte, error) {

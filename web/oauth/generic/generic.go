@@ -3,6 +3,7 @@ package generic
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -50,6 +51,8 @@ func (g *Generic) OnCallback(ctx *gin.Context, state string, query map[string]st
 		return factory.OidcCallback{}, fmt.Errorf("invalid state")
 	}
 
+	g.stateCache.Delete(state)
+
 	// 获取code
 	if code == "" {
 		return factory.OidcCallback{}, fmt.Errorf("no code provided")
@@ -68,7 +71,7 @@ func (g *Generic) OnCallback(ctx *gin.Context, state string, query map[string]st
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
 	if err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to get access token: %s", utils.DataMasking(err.Error(), []string{g.Addition.ClientSecret, g.Addition.ClientId}))
 	}
@@ -78,7 +81,7 @@ func (g *Generic) OnCallback(ctx *gin.Context, state string, query map[string]st
 		AccessToken string `json:"access_token"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tokenResp); err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to parse access token response: %s", utils.DataMasking(err.Error(), []string{g.Addition.ClientSecret, g.Addition.ClientId}))
 	}
 
@@ -87,14 +90,14 @@ func (g *Generic) OnCallback(ctx *gin.Context, state string, query map[string]st
 	userReq.Header.Set("Authorization", "Bearer "+tokenResp.AccessToken)
 	userReq.Header.Set("Accept", "application/json")
 
-	userResp, err := http.DefaultClient.Do(userReq)
+	userResp, err := (&http.Client{Timeout: 15 * time.Second}).Do(userReq)
 	if err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to get user info: %v", err)
 	}
 	defer userResp.Body.Close()
 
 	var user map[string]interface{}
-	if err := json.NewDecoder(userResp.Body).Decode(&user); err != nil {
+	if err := json.NewDecoder(io.LimitReader(userResp.Body, 1<<20)).Decode(&user); err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to parse user info response: %v", err)
 	}
 

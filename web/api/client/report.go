@@ -218,6 +218,9 @@ func WebSocketReport(c *gin.Context) {
 			}
 			break // 任何读错误（包括超时）都意味着连接已断开，退出循环
 		}
+		if fresh, err := clients.GetClientUUIDByToken(token); err != nil || fresh != uuid {
+			return
+		}
 		processMessage(conn, message, uuid)
 	}
 }
