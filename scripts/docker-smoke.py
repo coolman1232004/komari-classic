@@ -71,4 +71,12 @@ try:
         raise AssertionError('Agent did not report basic information')
 finally:
     subprocess.run(['docker', 'rm', '-f', 'komari-agent-smoke'], check=False, stdout=subprocess.DEVNULL)
-print('Docker smoke checks passed: UI, login, authorization, origin rejection, body limit, persistent login')
+# Changing claimed proxy headers must not bypass the account/peer limiter.
+for attempt in range(11):
+    failed = request('/api/login', b'{"username":"ci-rate-test","password":"wrong"}',
+                     {'Content-Type': 'application/json', 'X-Forwarded-For': f'192.0.2.{attempt}'})
+    expected = 401 if attempt < 10 else 429
+    assert failed.status == expected, f'Login limit: {failed.status} != {expected}'
+    if expected == 429:
+        assert failed.headers.get('Retry-After')
+print('Docker smoke checks passed: UI, login, authorization, origin rejection, body limit, persistence, agent and login throttling')

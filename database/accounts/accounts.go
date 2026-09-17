@@ -1,8 +1,6 @@
 package accounts
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"time"
@@ -14,21 +12,35 @@ import (
 	"github.com/google/uuid"
 )
 
-const constantSalt = "06Wm4Jv1Hkxx"
-
 // CheckPassword 检查密码是否正确
 //
 // 如果密码正确，返回用户的 UUID 和 true；否则返回空字符串和 false
 func CheckPassword(username, passwd string) (uuid string, success bool) {
+	// Bound simultaneous memory-hard verifications across every caller.
+	select {
+	case passwordChecks <- struct{}{}:
+		defer func() { <-passwordChecks }()
+	default:
+		return "", false
+	}
 	db := dbcore.GetDBInstance()
 	var user models.User
 	result := db.Where("username = ?", username).First(&user)
 	if result.Error != nil {
-		// 静默处理错误，不显示日志
+		// Match the expensive work for unknown usernames.
+		verifyPassword(dummyPasswordHash, passwd)
 		return "", false
 	}
-	if hashPasswd(passwd) != user.Passwd {
+	valid, legacy := verifyPassword(user.Passwd, passwd)
+	if !valid {
 		return "", false
+	}
+	if legacy {
+		// Compare-and-swap prevents overwriting a concurrent password reset.
+		updated := db.Model(&models.User{}).Where("uuid = ? AND passwd = ?", user.UUID, user.Passwd).Update("passwd", hashPasswd(passwd))
+		if updated.Error != nil || updated.RowsAffected != 1 {
+			return "", false
+		}
 	}
 	return user.UUID, true
 }
@@ -44,15 +56,6 @@ func ForceResetPassword(username, passwd string) (err error) {
 		return fmt.Errorf("无法找到用户名")
 	}
 	return nil
-}
-
-// hashPasswd 对密码进行加盐哈希
-func hashPasswd(passwd string) string {
-	saltedPassword := passwd + constantSalt
-	hash := sha256.New()
-	hash.Write([]byte(saltedPassword))
-	hashedPassword := base64.StdEncoding.EncodeToString(hash.Sum(nil))
-	return hashedPassword
 }
 
 func CreateAccount(username, passwd string) (user models.User, err error) {

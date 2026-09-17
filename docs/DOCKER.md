@@ -24,12 +24,14 @@ docker run -d --name komari-agent --restart unless-stopped \
   -e https://YOUR-KOMARI-HOST -t YOUR-NODE-TOKEN
 ```
 
-Container metrics depend on host mounts and namespaces. The command above does not grant host-level monitoring or host terminal access. Add only the access needed for your deployment. Container agents do not self-update their executable; rebuild the image and recreate the container deliberately.
+Container metrics depend on host mounts and namespaces. The command above does not grant host-level monitoring or host terminal access. Add only the access needed for your deployment. All Classic agents now omit the binary self-updater and its deprecated OpenPGP dependency; rebuild the image and recreate the container deliberately. Non-container installations also require manual replacement.
 
 ## Backup and rollback
 
 Before changing versions, stop the server and copy the entire `data` directory. Record the running image ID using `docker inspect komari --format '{{.Image}}'` and save the image using `docker image save`. Start the server again after the copy finishes. Keep backups private because they contain credentials and node tokens.
 
-To roll back, stop the server, restore the matching data backup and use the saved previous image. Do not point an older version at a newer-version database without a matching backup. Avoid unattended `latest` image replacement. After a tested build, deploy the recorded image ID/digest or an immutable release tag.
+To roll back, stop the server, restore the matching data backup and use the saved previous image. Do not point an older version at a newer-version database without a matching backup. Successful password verification upgrades old password hashes to Argon2id; old binaries cannot verify these new hashes. Avoid unattended `latest` image replacement. After a tested build, deploy the recorded image ID/digest or an immutable release tag.
+
+Password login allows 10 attempts per account per five minutes, 20 per socket peer per minute and 60 per server per minute, including 2FA attempts. On HTTP 429, wait for the Retry-After interval. Limits reset when the server process restarts. Reverse-proxy users share the proxy's peer budget; forwarded IP headers cannot bypass it. Password migration does not change the password or remove 2FA. Use a password reset for dormant accounts that will not log in to migrate.
 
 Application message size is limited to 8 MiB and backup/theme uploads to 512 MiB in this branch. A reverse proxy should also enforce request-size and connection limits. Large backup restores may need a local restore workflow rather than browser upload.

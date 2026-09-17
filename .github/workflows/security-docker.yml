@@ -35,8 +35,11 @@ jobs:
           mkdir -p data
           docker compose run -d --service-ports --name komari-smoke -e ADMIN_USERNAME=ci-admin -e ADMIN_PASSWORD=ci-test-password komari
           python3 scripts/docker-smoke.py
-          docker restart komari-smoke
+          docker stop komari-smoke
+          python3 scripts/docker-password-check.py --seed-legacy
+          docker start komari-smoke
           python3 scripts/docker-smoke.py
+          python3 scripts/docker-password-check.py
           test -s data/komari.db
       - name: Validate agent HTTPS trust store
         run: docker run --rm --entrypoint sh komari-agent:test -c 'test -s /etc/ssl/certs/ca-certificates.crt && test -f /.komari-agent-container'
