@@ -372,7 +372,7 @@ const AutoDiscoverySection = ({
         // 通过 bind mount 持久化该文件，容器更新重建后复用同一身份，避免重复注册。
         // 注意：文件挂载要求宿主机上文件已存在，否则 Docker 会将其创建为目录。
         finalCommand =
-          `docker build -f Dockerfile.source -t komari-classic-agent:1.2.5-fix2-hardening https://github.com/coolman1232004/komari-classic.git#98a06154714f9d65aa3680add5d5c37962537a0c:agent && ` +
+          `docker build -f Dockerfile.source -t komari-classic-agent:1.2.5-fix2-hardening https://github.com/coolman1232004/komari-classic.git#3b95a3cb0e1f62fe21099c2f04397d918bc8aff4:agent && ` +
           `touch .komari-auto-discovery.json && ` +
           `docker run -d --name komari-agent --restart=always ` +
           `-v "$(pwd)/.komari-auto-discovery.json:/app/auto-discovery.json" ` +
@@ -1578,7 +1578,7 @@ function GenerateCommandButton({ node, settings }: { node: NodeDetail, settings:
           dockerArgs.push(args[i]);
         }
         finalCommand =
-          `docker build -f Dockerfile.source -t komari-classic-agent:1.2.5-fix2-hardening https://github.com/coolman1232004/komari-classic.git#98a06154714f9d65aa3680add5d5c37962537a0c:agent && ` +
+          `docker build -f Dockerfile.source -t komari-classic-agent:1.2.5-fix2-hardening https://github.com/coolman1232004/komari-classic.git#3b95a3cb0e1f62fe21099c2f04397d918bc8aff4:agent && ` +
           `docker run -d --name komari-agent --restart=always ` +
           `komari-classic-agent:1.2.5-fix2-hardening ` +
           quoteShellArgs(dockerArgs);
