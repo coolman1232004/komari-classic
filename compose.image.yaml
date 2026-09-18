@@ -1,0 +1,18 @@
+services:
+  komari:
+    image: ghcr.io/coolman1232004/komari-classic:v1.2.5-fix2-security.1@sha256:c778e536445f262f967e1a699ca72fabef010f04c7fd5f6fafedff81d094e308
+    container_name: komari-classic-security
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:25775:25774"
+    volumes:
+      - komari-classic-security-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  komari-classic-security-data:

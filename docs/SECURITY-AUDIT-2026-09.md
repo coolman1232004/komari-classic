@@ -1,6 +1,6 @@
 # Extended security review — 2026-09-18
 
-This is a source review with regression tests and dependency/container scanning, not a certification or a promise of zero vulnerabilities. The untouched upstream-derived baseline remains on `main`; changes are reviewed in PR #1. Deployment on the owner's actual VPS has not been inspected.
+This is a source review with regression tests and dependency/container scanning, not a certification or a promise of zero vulnerabilities. The untouched upstream-derived baseline remains at tag `v1.2.5-fix2`; PR #1 has been reviewed and merged into `main`. Deployment on the owner's actual VPS has not been inspected.
 
 ## Changes from the first hardening pass
 
@@ -48,3 +48,5 @@ Runtime images move from Alpine 3.21 (main support ends 2026-11-01) to Alpine 3.
 Nezha compatibility now requires creating the node in Komari first, then configuring its UUID and token in the compatible agent. Existing empty-token auto-created records cannot authenticate; replace their credentials through the administrator UI. Its optional gRPC listener uses plaintext transport: keep it disabled unless needed, or put it behind TLS/VPN/firewall restrictions. The default Compose file does not publish that listener. This finding concerns Komari's compatibility implementation, not a claim about a particular Nezha upstream CVE.
 
 The next scan caught OpenSSL 3.5.7-r0 inherited from Alpine 3.24: both libcrypto3 and libssl3 need 3.5.8-r0, including the HIGH CVE-2026-14456. Adding packages alone did not upgrade libraries already in the base. All four runtime Dockerfiles now upgrade installed packages and explicitly require those patched minimum versions; official x86_64 and aarch64 package indexes both provided 3.5.8-r0 on 2026-09-18. The image scanner now runs on both architectures and retains separate reports. Final CI results remain authoritative.
+
+Published-image verification and the 1.2.7 downgrade restriction are recorded in [RELEASE-SECURITY-1.md](RELEASE-SECURITY-1.md).

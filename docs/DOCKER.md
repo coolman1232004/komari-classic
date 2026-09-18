@@ -1,9 +1,13 @@
 # Docker installation from your fork
 
-The unchanged baseline remains on `main` until the hardening branch is reviewed. For the hardened source build:
+For a prebuilt image, follow the [repository README](../README.md) and use `compose.image.yaml`. It pins the published multi-architecture digest, uses a separate volume and binds to localhost port 25775. The steps below remain available for source builds.
+
+**Do not directly downgrade a 1.2.7 backup into this version.** See [release and compatibility notes](RELEASE-SECURITY-1.md).
+
+The unchanged baseline remains at tag `v1.2.5-fix2`; the hardened version has been merged into `main`. For a source build:
 
 ```sh
-git clone --branch codex/security-hardening https://github.com/coolman1232004/komari-classic.git
+git clone --branch v1.2.5-fix2-security.1 https://github.com/coolman1232004/komari-classic.git
 cd komari-classic
 docker compose up -d --build
 docker compose logs komari
@@ -13,7 +17,7 @@ The server binds to `127.0.0.1:25774` by default. Put an HTTPS reverse proxy in 
 
 Initial administrator credentials appear in startup logs. Log in, choose a unique password and enable 2FA. Data stays in `./data`. Do not mount the Docker socket or use privileged mode for the server. The Compose configuration prevents privilege escalation and rotates logs. Default Docker filesystem capabilities are retained for compatibility with existing bind-mounted data directories.
 
-This builds the UI and server inside Docker; Go and Node are not required on the host. The existing release Dockerfile remains available for prebuilt release binaries. No prebuilt hardened GHCR image is promised until it has actually been published. The source build works independently of GHCR publishing.
+This builds the UI and server inside Docker; Go and Node are not required on the host. The existing release Dockerfile remains available for prebuilt release binaries. Prebuilt server and agent images are published under the owner coolman1232004 with version v1.2.5-fix2-security.1. The source build remains available independently of GHCR.
 
 ## Agent image
 

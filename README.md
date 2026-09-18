@@ -1,67 +1,40 @@
-# Security maintenance branch
+# Komari Classic Security
 
-The untouched baseline is preserved at commit ea2d85b52ccbb211c144235b9cb51b67d4380cd8. See [Docker installation](docs/DOCKER.md) and [security review](docs/SECURITY-REVIEW.md) for this branch. The original README below describes the baseline publisher and images, not a published hardened release.
+基於服務端／網頁端 **1.2.5-fix2**、探針 **1.2.60** 的安全加固版本。保留既有監控功能，更新有安全修正的依賴。原版保存於標籤 `v1.2.5-fix2`；已審查的安全修正已合併到 `main`。
 
-# Komari Classic
+**1.2.7 使用者：不要直接降級覆蓋資料。** 1.2.7 已改用新的歷史指標儲存，備份不能視為可直接無損還原到此舊版。先保留現有服務及離線備份，使用獨立資料目錄／Docker volume 測試。[相容性及安全說明](docs/RELEASE-SECURITY-1.md)。
 
-将以下三个固定版本合并为一个独立仓库，保留原有界面、功能、协议和依赖版本。
+## Docker 安裝
 
-| 组件 | 固定源码版本 | 目录 | 原项目 |
-| --- | --- | --- | --- |
-| 服务端 | 1.2.5-fix2 | 仓库根目录 | [komari](https://github.com/komari-monitor/komari) |
-| 网页端 | 1.2.5-fix2 | `frontend/` | [komari-web](https://github.com/komari-monitor/komari-web) |
-| 探针 | 1.2.60 | `agent/` | [komari-agent](https://github.com/komari-monitor/komari-agent) |
+固定版本：`v1.2.5-fix2-security.1`。AMD64／ARM64 共用相同映像地址。只需要 Docker Engine 和 Compose，主機不需要 Go 或 Node。
 
-源码来自上述版本的存档。构建只使用本仓库中的代码和依赖锁定文件，不自动同步原项目的新版本，后续也不再更新。
-
-## 部署服务端
-
-### Docker Compose
-
-在服务器上创建部署目录，并执行：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/kadidalax/komari-classic/main/compose.yaml -o compose.yaml
-docker compose up -d
-```
-
-访问 `http://服务器地址:25774`。此固定版本的初始登录信息由服务端启动时生成，请在自己的服务器上查看启动日志后登录；登录后可在后台修改。数据保存在部署目录下的 `data/`。
-
-服务端镜像：`ghcr.io/kadidalax/komari-classic:latest`。
-
-更新到本仓库最新正式发行版：
-
-```bash
+```sh
+mkdir komari-classic-security
+cd komari-classic-security
+curl -fsSL https://raw.githubusercontent.com/coolman1232004/komari-classic/main/compose.image.yaml -o compose.yaml
 docker compose pull
 docker compose up -d
+docker compose logs komari
 ```
 
-需要固定某次发行版时，将 `compose.yaml` 中的 `:latest` 改为对应标签，例如 `:v1.2.5-fix2`。
+這份 Compose 使用獨立的 Docker volume、容器名 `komari-classic-security` 及 `127.0.0.1:25775`，方便與現有 1.2.7 並行測試。不要掛載現有 1.2.7 資料。透過 HTTPS 反向代理或 SSH tunnel 存取；首次登入後設定獨立強密碼及 2FA。刪除容器不會自動刪除 volume；不要執行 `docker compose down -v`，除非確實要刪除資料。
 
-### Linux 安装脚本
+服務端映像：`ghcr.io/coolman1232004/komari-classic:v1.2.5-fix2-security.1`。
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/kadidalax/komari-classic/main/install-komari.sh -o install-komari.sh
-sudo bash install-komari.sh
-```
+探針映像：`ghcr.io/coolman1232004/komari-classic-agent:v1.2.5-fix2-security.1`。探針需要你自己的服務端地址及節點 token，宿主機監控範圍視掛載與命名空間設定而定。不需要遠端終端時加入 `--disable-web-ssh`。
 
-菜单 `1` 安装，菜单 `2` 更新。重新执行本仓库的脚本即可管理和更新。沿用原版的 `komari` 服务名及 `/opt/komari` 安装目录。
+[發佈與驗證結果](https://github.com/coolman1232004/komari-classic/releases/tag/v1.2.5-fix2-security.1) · [詳細 Docker／備份說明](docs/DOCKER.md) · [安全檢查範圍及限制](docs/SECURITY-AUDIT-2026-09.md)
 
-也可以从 [Releases](https://github.com/kadidalax/komari-classic/releases) 下载对应系统和架构的 `komari-*` 文件；服务端启动参数仍为 `server`。
+## 安全結論
 
-## 安装和更新探针
+修正涵蓋探針身份及欄位隔離、Nezha 相容接口驗證、Session／RPC／終端權限重驗、Argon2id 密碼升級、登入與 TOTP 限流、OAuth state、ZIP 解壓、主題下載、秘密日誌、cloudflared 和 OpenSSL 依賴。
 
-在本项目后台添加服务器，复制后台生成的安装命令。Linux、Windows、macOS 安装命令均从本仓库的 `agent/` 目录下载脚本。
+實際發佈映像在 AMD64／ARM64 都通過匿名拉取與安裝驗證。最新掃描：服務端 0 高危／嚴重、0 中危、2 低危、2 未分類；探針 0。兩筆低危是 cloudflared 的條件式診斷日誌公告，依賴尚未升至公告修補版，預設 logger 不觸發；完整說明見發佈紀錄。
 
-- 探针二进制附件：`komari-agent-系统-架构`，Windows 文件以 `.exe` 结尾。
-- 探针 Docker 镜像：`ghcr.io/kadidalax/komari-classic-agent:latest`。
-- 探针自动更新只查询本仓库，并只选择 `komari-agent-*` 附件。
-- 探针 Docker 部署通过拉取镜像并重建容器更新，沿用原有参数。
+安全掃描通過不等於零漏洞。實際 VPS、防火牆、代理、主題與憑證仍需要妥善管理。功能版本可以固定，安全依賴及 Docker 基底仍需定期檢視。二進位自動更新器已停用，更新需更換經驗證的映像。
 
-原项目已经安装的探针仍内置原项目更新地址。切换到 Classic 时，先更新服务端，再使用 Classic 后台生成的命令重新安装一次探针，之后才会跟随本仓库更新。探针的原有配置、服务名和命令参数保持兼容。若服务端从更高版本回退，请先备份数据，并使用独立数据目录或与本版本匹配的备份；本项目没有添加数据库降级转换。
+## 源碼建置與來源
 
-## 来源与许可
+需要自行建置時，使用倉庫中的 `compose.yaml`；預製映像安裝使用 `compose.image.yaml`。
 
-感谢 [komari-monitor](https://github.com/komari-monitor) 和原项目贡献者。本仓库保留原版 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[探针许可证](agent/LICENSE) 及前端作者署名。
-
-原版功能文档、第三方主题市场、GeoIP 数据等资源引用继续沿用原来的来源；服务端、网页和探针的程序部署及更新来源统一为本仓库。
+感謝 [komari-monitor](https://github.com/komari-monitor) 及 [kadidalax/komari-classic](https://github.com/kadidalax/komari-classic)。原始來源說明保存在 [歷史 README](docs/UPSTREAM-CLASSIC-README.md)，原有授權檔案保留於倉庫。
