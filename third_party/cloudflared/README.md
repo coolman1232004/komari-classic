@@ -6,4 +6,6 @@ The release binary carried vulnerable x/crypto 0.53.0 and gRPC 1.83.0 dependenci
 
 Upstream: https://github.com/cloudflare/cloudflared/tree/f11dea9cb7079e90a982c1a2d5548ab40847fdcf (Apache-2.0). Its license is copied into the final image. The source archive and module manifests are pinned; Alpine package repositories and base-image tags can receive security updates.
 
-Both Docker architectures check that the executable starts. A live Cloudflare Tunnel connection requires deployment credentials and is not tested by this repository's CI.
+Security 2 upgrades the OpenTelemetry SDK, trace exporter and related modules to 1.45.0, fixing CVE-2026-81870 (GHSA-8wmf-6v46-5gfg). Required transitive modules are locked in go.mod/go.sum. Both Docker build paths run the upstream tracing tests before compiling cloudflared, and both architectures check that the executable starts. A live Cloudflare Tunnel connection requires deployment credentials and is not tested by this repository's CI.
+
+GO-2026-5932 covers the unmaintained x/crypto/openpgp package and has no fixed version. The module is still required for other cryptographic packages; dependency scans must confirm that OpenPGP is not imported. Keep this module-level finding visible in container reports rather than suppressing it.

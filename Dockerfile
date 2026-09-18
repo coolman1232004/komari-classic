@@ -6,6 +6,7 @@ RUN curl -fsSL https://codeload.github.com/cloudflare/cloudflared/tar.gz/f11dea9
     && echo "d9c67e530861b212529fe67f4d7fe04335dc80f07026370a57c46fa611f7730f  /tmp/cloudflared.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/cloudflared.tar.gz --strip-components=1
 COPY third_party/cloudflared/go.mod third_party/cloudflared/go.sum ./
+RUN CGO_ENABLED=0 go test -mod=readonly ./tracing
 RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w -X main.Version=2026.9.1-classic-security -X github.com/cloudflare/cloudflared/cmd/cloudflared/updater.BuiltForPackageManager=komari-classic" -o /out/cloudflared ./cmd/cloudflared
 
 FROM alpine:3.24
