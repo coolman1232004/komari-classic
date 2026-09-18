@@ -32,7 +32,11 @@ func UpgradeWebSocket(c *gin.Context, options ...WebSocketUpgradeOption) (*webso
 	for _, option := range options {
 		option(&upgrader)
 	}
-	return upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err == nil {
+		conn.SetReadLimit(security.MaxMessageBytes)
+	}
+	return conn, err
 }
 
 func CheckWebSocketOrigin(r *http.Request) bool {

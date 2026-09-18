@@ -3,6 +3,7 @@ package admin
 import (
 	"archive/zip"
 	"fmt"
+	"github.com/komari-monitor/komari/utils/safearchive"
 	"io"
 	"log"
 	"net/http"
@@ -68,6 +69,11 @@ func UploadBackup(c *gin.Context) {
 
 	// 基础校验：检查是否包含标记文件
 	if zr, err := zip.OpenReader(tempFilePath); err == nil {
+		if err := safearchive.Validate(zr.File); err != nil {
+			zr.Close()
+			api.RespondError(c, 400, "Unsafe backup archive: "+err.Error())
+			return
+		}
 		hasMarkup := false
 		for _, f := range zr.File {
 			if f.Name == "komari-backup-markup" {

@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/komari-monitor/komari/utils/safearchive"
+	"github.com/komari-monitor/komari/utils/safehttp"
+	"github.com/komari-monitor/komari/web/security"
 	"io"
 	"net"
 	"net/http"
@@ -31,7 +34,13 @@ func UploadTheme(c *gin.Context) {
 	}
 
 	// 临时文件名
-	tempFile := filepath.Join(os.TempDir(), "uploaded_theme.zip")
+	temporary, err := os.CreateTemp("", "komari-theme-*.zip")
+	if err != nil {
+		api.RespondError(c, 500, "Cannot create temporary theme file")
+		return
+	}
+	tempFile := temporary.Name()
+	temporary.Close()
 	if err := os.WriteFile(tempFile, data, 0644); err != nil {
 		api.RespondError(c, http.StatusInternalServerError, "保存文件失败: "+err.Error())
 		return
@@ -133,6 +142,11 @@ func DeleteTheme(c *gin.Context) {
 
 // SetTheme 设置主题
 func SetTheme(c *gin.Context) {
+	if c.Request.Method != http.MethodPost {
+		c.Header("Allow", http.MethodPost)
+		c.AbortWithStatus(http.StatusMethodNotAllowed)
+		return
+	}
 	themeName := c.Query("theme")
 	if themeName == "" {
 		api.RespondError(c, http.StatusBadRequest, "主题名称不能为空")
@@ -173,6 +187,9 @@ func extractAndValidateTheme(zipPath string) (models.Theme, error) {
 		return themeInfo, fmt.Errorf("无法打开ZIP文件: %v", err)
 	}
 	defer r.Close()
+	if err := safearchive.Validate(r.File); err != nil {
+		return themeInfo, err
+	}
 
 	// 查找komari-theme.json文件
 	var themeConfigFile *zip.File
@@ -194,7 +211,7 @@ func extractAndValidateTheme(zipPath string) (models.Theme, error) {
 	}
 	defer rc.Close()
 
-	configData, err := io.ReadAll(rc)
+	configData, err := security.ReadLimited(rc, 1<<20)
 	if err != nil {
 		return themeInfo, fmt.Errorf("读取主题配置失败: %v", err)
 	}
@@ -231,44 +248,8 @@ func extractAndValidateTheme(zipPath string) (models.Theme, error) {
 		return themeInfo, fmt.Errorf("创建主题目录失败: %v", err)
 	}
 
-	// 解压文件到主题目录
-	for _, f := range r.File {
-		path := filepath.Join(themeDir, f.Name)
-
-		// 安全检查，防止路径遍历攻击
-		if !strings.HasPrefix(path, filepath.Clean(themeDir)+string(os.PathSeparator)) {
-			continue
-		}
-
-		if f.FileInfo().IsDir() {
-			os.MkdirAll(path, f.FileInfo().Mode())
-			continue
-		}
-
-		// 创建目录
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			return themeInfo, fmt.Errorf("创建目录失败: %v", err)
-		}
-
-		// 解压文件
-		rc, err := f.Open()
-		if err != nil {
-			return themeInfo, fmt.Errorf("打开压缩文件失败: %v", err)
-		}
-
-		outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.FileInfo().Mode())
-		if err != nil {
-			rc.Close()
-			return themeInfo, fmt.Errorf("创建文件失败: %v", err)
-		}
-
-		_, err = io.Copy(outFile, rc)
-		outFile.Close()
-		rc.Close()
-
-		if err != nil {
-			return themeInfo, fmt.Errorf("解压文件失败: %v", err)
-		}
+	if err := safearchive.Extract(r.File, themeDir); err != nil {
+		return themeInfo, err
 	}
 
 	return themeInfo, nil
@@ -339,7 +320,7 @@ func downloadThemeFromURL(rawURL string) ([]byte, error) {
 	}
 
 	// 发送HTTP GET请求
-	resp, err := http.Get(rawURL)
+	resp, err := safehttp.Get(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("下载主题文件失败: %v", err)
 	}
@@ -351,7 +332,7 @@ func downloadThemeFromURL(rawURL string) ([]byte, error) {
 	}
 
 	// 读取响应内容
-	data, err := io.ReadAll(resp.Body)
+	data, err := security.ReadLimited(resp.Body, 64<<20)
 	if err != nil {
 		return nil, fmt.Errorf("读取主题文件内容失败: %v", err)
 	}
@@ -384,7 +365,7 @@ func getGitHubReleaseDownloadURL(owner, repo string) (string, error) {
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
 
 	// 发送HTTP GET请求
-	resp, err := http.Get(apiURL)
+	resp, err := safehttp.Get(apiURL)
 	if err != nil {
 		return "", fmt.Errorf("获取GitHub release信息失败: %v", err)
 	}
@@ -403,7 +384,7 @@ func getGitHubReleaseDownloadURL(owner, repo string) (string, error) {
 		} `json:"assets"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&releaseInfo); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&releaseInfo); err != nil {
 		return "", fmt.Errorf("解析GitHub API响应失败: %v", err)
 	}
 
@@ -611,7 +592,13 @@ func UpdateTheme(c *gin.Context) {
 	// 4. 用户提供的GitHub仓库信息，获取最新release下载
 
 	// 临时文件名
-	tempFile := filepath.Join(os.TempDir(), "downloaded_theme.zip")
+	temporary, err := os.CreateTemp("", "komari-theme-*.zip")
+	if err != nil {
+		api.RespondError(c, 500, "Cannot create temporary theme file")
+		return
+	}
+	tempFile := temporary.Name()
+	temporary.Close()
 	if err := os.WriteFile(tempFile, themeData, 0644); err != nil {
 		api.RespondError(c, http.StatusInternalServerError, "保存文件失败: "+err.Error())
 		return
@@ -656,6 +643,9 @@ func peekThemeFromZip(zipPath string) (models.Theme, error) {
 		return themeInfo, fmt.Errorf("无法打开ZIP文件: %v", err)
 	}
 	defer r.Close()
+	if err := safearchive.Validate(r.File); err != nil {
+		return themeInfo, err
+	}
 
 	var themeConfigFile *zip.File
 	for _, f := range r.File {
@@ -675,7 +665,7 @@ func peekThemeFromZip(zipPath string) (models.Theme, error) {
 	}
 	defer rc.Close()
 
-	configData, err := io.ReadAll(rc)
+	configData, err := security.ReadLimited(rc, 1<<20)
 	if err != nil {
 		return themeInfo, fmt.Errorf("读取主题配置失败: %v", err)
 	}
@@ -733,7 +723,13 @@ func ImportTheme(c *gin.Context) {
 	}
 
 	// 保存到临时文件
-	tempFile := filepath.Join(os.TempDir(), "import_theme.zip")
+	temporary, err := os.CreateTemp("", "komari-theme-*.zip")
+	if err != nil {
+		api.RespondError(c, 500, "Cannot create temporary theme file")
+		return
+	}
+	tempFile := temporary.Name()
+	temporary.Close()
 	if err := os.WriteFile(tempFile, themeData, 0644); err != nil {
 		api.RespondError(c, http.StatusInternalServerError, "保存文件失败: "+err.Error())
 		return

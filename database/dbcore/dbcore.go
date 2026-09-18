@@ -3,6 +3,7 @@ package dbcore
 import (
 	"archive/zip"
 	"fmt"
+	"github.com/komari-monitor/komari/utils/safearchive"
 	"io"
 	"log"
 	"os"
@@ -124,45 +125,7 @@ func unzipToDir(zipPath, dstDir string) error {
 	}
 	defer zr.Close()
 
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
-		return err
-	}
-	absDst, _ := filepath.Abs(dstDir)
-
-	for _, f := range zr.File {
-		// 构造目标路径并做路径遍历保护
-		cleanName := filepath.Clean(f.Name)
-		targetPath := filepath.Join(absDst, cleanName)
-		if !strings.HasPrefix(targetPath, absDst+string(os.PathSeparator)) && targetPath != absDst {
-			return fmt.Errorf("illegal file path in zip: %s", f.Name)
-		}
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(targetPath, 0755); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			return err
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		out, err := os.Create(targetPath)
-		if err != nil {
-			rc.Close()
-			return err
-		}
-		if _, err := io.Copy(out, rc); err != nil {
-			out.Close()
-			rc.Close()
-			return err
-		}
-		out.Close()
-		rc.Close()
-	}
-	return nil
+	return safearchive.Extract(zr.File, dstDir)
 }
 
 var (

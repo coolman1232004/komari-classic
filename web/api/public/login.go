@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/komari-monitor/komari/database/accounts"
 	"github.com/komari-monitor/komari/database/auditlog"
@@ -41,7 +42,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	bodyBytes, err := io.ReadAll(c.Request.Body)
+	bodyBytes, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 16*1024))
 	if err != nil {
 		api.RespondError(c, http.StatusBadRequest, "Invalid request body: "+err.Error())
 		return
@@ -57,6 +58,16 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	if len(data.Username) > 256 || len(data.Password) > 4096 || len(data.TwoFa) > 32 {
+		api.RespondError(c, http.StatusBadRequest, "Credentials exceed supported length")
+		return
+	}
+	// Count before password/2FA validation, including successful attempts.
+	if !passwordLoginLimiter.allow(c.Request.RemoteAddr, data.Username, time.Now()) {
+		c.Header("Retry-After", "300")
+		api.RespondError(c, http.StatusTooManyRequests, "Too many login attempts; try again later")
+		return
+	}
 	uuid, success := accounts.CheckPassword(data.Username, data.Password)
 	if !success {
 		api.RespondError(c, http.StatusUnauthorized, "Invalid credentials")

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	agent_runtime "github.com/komari-monitor/komari/web/agent"
 	"github.com/komari-monitor/komari/web/api"
 	"github.com/komari-monitor/komari/web/connection"
+	"github.com/komari-monitor/komari/web/security"
 )
 
 func readMaybeCompressedBody(r *http.Request) ([]byte, error) {
@@ -28,9 +28,9 @@ func readMaybeCompressedBody(r *http.Request) ([]byte, error) {
 			return nil, err
 		}
 		defer zr.Close()
-		return io.ReadAll(zr)
+		return security.ReadLimited(zr, security.MaxMessageBytes)
 	}
-	return io.ReadAll(r.Body)
+	return security.ReadLimited(r.Body, security.MaxMessageBytes)
 }
 
 func bindV2Params[T any](raw any, target *T) error {
@@ -128,6 +128,7 @@ func WebSocketV2RPC(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Require WebSocket upgrade"})
 		return
 	}
+	validCredentials := api.CredentialValidator(c)
 	unsafeConn, err := api.UpgradeWebSocket(c, api.EnableWebSocketCompression)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Failed to upgrade to WebSocket." + err.Error()})
@@ -165,6 +166,9 @@ func WebSocketV2RPC(c *gin.Context) {
 			return
 		}
 		message = bytes.TrimSpace(message)
+		if !validCredentials() {
+			return
+		}
 		var req v2.Request
 		if err := json.Unmarshal(message, &req); err != nil {
 			conn.WriteJSON(v2.Error(nil, -32700, "parse error", err.Error()))

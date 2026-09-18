@@ -13,7 +13,6 @@ func GinLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
 
 		// 处理请求
 		c.Next()
@@ -37,9 +36,6 @@ func GinLogger() gin.HandlerFunc {
 		}(statusCode)
 
 		msg := fmt.Sprintf("%s %s %s", statusCodeColored, c.Request.Method, path)
-		if query != "" {
-			msg += "?" + query
-		}
 		msg += fmt.Sprintf(" | %s | %s", c.ClientIP(), latency)
 
 		if len(c.Errors) > 0 {

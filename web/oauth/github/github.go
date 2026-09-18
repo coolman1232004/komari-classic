@@ -3,8 +3,10 @@ package github
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -33,7 +35,7 @@ func (g *Github) GetAuthorizationURL(_ string) (string, string) {
 		url.QueryEscape(g.Addition.ClientId),
 		url.QueryEscape(state),
 	)
-	g.stateCache.Set(state, true, cache.NoExpiration)
+	g.stateCache.Set(state, true, cache.DefaultExpiration)
 	return authURL, state
 }
 func (g *Github) OnCallback(ctx *gin.Context, state string, query map[string]string, _ string) (factory.OidcCallback, error) {
@@ -51,6 +53,8 @@ func (g *Github) OnCallback(ctx *gin.Context, state string, query map[string]str
 		return factory.OidcCallback{}, fmt.Errorf("invalid state")
 	}
 
+	g.stateCache.Delete(state)
+
 	// 获取code
 	//code := c.Query("code")
 	if code == "" {
@@ -65,11 +69,11 @@ func (g *Github) OnCallback(ctx *gin.Context, state string, query map[string]str
 		"code":          {code},
 	}
 
-	req, _ := http.NewRequest("POST", tokenURL, nil)
-	req.URL.RawQuery = data.Encode()
+	req, _ := http.NewRequest("POST", tokenURL, strings.NewReader(data.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
 	if err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to get access token: %s", utils.DataMasking(err.Error(), []string{g.Addition.ClientSecret, g.Addition.ClientId}))
 	}
@@ -81,7 +85,7 @@ func (g *Github) OnCallback(ctx *gin.Context, state string, query map[string]str
 		Scope       string `json:"scope"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tokenResp); err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to parse access token response: %s", utils.DataMasking(err.Error(), []string{g.Addition.ClientSecret, g.Addition.ClientId}))
 	}
 
@@ -90,14 +94,14 @@ func (g *Github) OnCallback(ctx *gin.Context, state string, query map[string]str
 	userReq.Header.Set("Authorization", "Bearer "+tokenResp.AccessToken)
 	userReq.Header.Set("Accept", "application/json")
 
-	userResp, err := http.DefaultClient.Do(userReq)
+	userResp, err := (&http.Client{Timeout: 15 * time.Second}).Do(userReq)
 	if err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to get user info: %v", err)
 	}
 	defer userResp.Body.Close()
 
 	var githubUser GitHubUser
-	if err := json.NewDecoder(userResp.Body).Decode(&githubUser); err != nil {
+	if err := json.NewDecoder(io.LimitReader(userResp.Body, 1<<20)).Decode(&githubUser); err != nil {
 		return factory.OidcCallback{}, fmt.Errorf("failed to parse user info response: %v", err)
 	}
 

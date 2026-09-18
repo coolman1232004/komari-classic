@@ -1,8 +1,6 @@
 package accounts
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"time"
@@ -12,47 +10,55 @@ import (
 	"github.com/komari-monitor/komari/utils"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
-
-const constantSalt = "06Wm4Jv1Hkxx"
 
 // CheckPassword 检查密码是否正确
 //
 // 如果密码正确，返回用户的 UUID 和 true；否则返回空字符串和 false
 func CheckPassword(username, passwd string) (uuid string, success bool) {
+	// Bound simultaneous memory-hard verifications across every caller.
+	select {
+	case passwordChecks <- struct{}{}:
+		defer func() { <-passwordChecks }()
+	default:
+		return "", false
+	}
 	db := dbcore.GetDBInstance()
 	var user models.User
 	result := db.Where("username = ?", username).First(&user)
 	if result.Error != nil {
-		// 静默处理错误，不显示日志
+		// Match the expensive work for unknown usernames.
+		verifyPassword(dummyPasswordHash, passwd)
 		return "", false
 	}
-	if hashPasswd(passwd) != user.Passwd {
+	valid, legacy := verifyPassword(user.Passwd, passwd)
+	if !valid {
 		return "", false
+	}
+	if legacy {
+		// Compare-and-swap prevents overwriting a concurrent password reset.
+		updated := db.Model(&models.User{}).Where("uuid = ? AND passwd = ?", user.UUID, user.Passwd).Update("passwd", hashPasswd(passwd))
+		if updated.Error != nil || updated.RowsAffected != 1 {
+			return "", false
+		}
 	}
 	return user.UUID, true
 }
 
 // ForceResetPassword 强制重置用户密码
 func ForceResetPassword(username, passwd string) (err error) {
-	db := dbcore.GetDBInstance()
-	result := db.Model(&models.User{}).Where("username = ?", username).Update("passwd", hashPasswd(passwd))
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("无法找到用户名")
-	}
-	return nil
-}
-
-// hashPasswd 对密码进行加盐哈希
-func hashPasswd(passwd string) string {
-	saltedPassword := passwd + constantSalt
-	hash := sha256.New()
-	hash.Write([]byte(saltedPassword))
-	hashedPassword := base64.StdEncoding.EncodeToString(hash.Sum(nil))
-	return hashedPassword
+	hashed := hashPasswd(passwd)
+	return dbcore.GetDBInstance().Transaction(func(db *gorm.DB) error {
+		result := db.Model(&models.User{}).Where("username = ?", username).Update("passwd", hashed)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("user not found")
+		}
+		return db.Where("uuid IN (?)", db.Model(&models.User{}).Select("uuid").Where("username = ?", username)).Delete(&models.Session{}).Error
+	})
 }
 
 func CreateAccount(username, passwd string) (user models.User, err error) {
@@ -71,12 +77,12 @@ func CreateAccount(username, passwd string) (user models.User, err error) {
 }
 
 func DeleteAccountByUsername(username string) (err error) {
-	db := dbcore.GetDBInstance()
-	err = db.Where("username = ?", username).Delete(&models.User{}).Error
-	if err != nil {
-		return err
-	}
-	return nil
+	return dbcore.GetDBInstance().Transaction(func(db *gorm.DB) error {
+		if err := db.Where("uuid IN (?)", db.Model(&models.User{}).Select("uuid").Where("username = ?", username)).Delete(&models.Session{}).Error; err != nil {
+			return err
+		}
+		return db.Where("username = ?", username).Delete(&models.User{}).Error
+	})
 }
 
 // 创建默认管理员账户，使用环境变量 ADMIN_USERNAME 作为用户名，环境变量 ADMIN_PASSWORD 作为密码

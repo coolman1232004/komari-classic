@@ -12,6 +12,18 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestCrossSiteNavigationWithoutOriginIsRejected(t *testing.T) {
+	setupCORSConfigDB(t, "")
+	r := setupCORSRouter(true, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("cross-site navigation got %d", w.Code)
+	}
+}
+
 func TestCorsMiddlewareValidatesAPIOrigins(t *testing.T) {
 	setupCORSConfigDB(t, "")
 	router := setupCORSRouter(true, "https://allowed.example")

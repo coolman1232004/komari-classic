@@ -1,4 +1,14 @@
-FROM alpine:3.21
+FROM golang:1.26.8-alpine AS cloudflared-build
+RUN apk add --no-cache curl ca-certificates
+WORKDIR /src/cloudflared
+# Official 2026.9.1 source, pinned by commit and archive checksum.
+RUN curl -fsSL https://codeload.github.com/cloudflare/cloudflared/tar.gz/f11dea9cb7079e90a982c1a2d5548ab40847fdcf -o /tmp/cloudflared.tar.gz \
+    && echo "d9c67e530861b212529fe67f4d7fe04335dc80f07026370a57c46fa611f7730f  /tmp/cloudflared.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/cloudflared.tar.gz --strip-components=1
+COPY third_party/cloudflared/go.mod third_party/cloudflared/go.sum ./
+RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w -X main.Version=2026.9.1-classic-security -X github.com/cloudflare/cloudflared/cmd/cloudflared/updater.BuiltForPackageManager=komari-classic" -o /out/cloudflared ./cmd/cloudflared
+
+FROM alpine:3.24
 
 WORKDIR /app
 
@@ -6,18 +16,13 @@ WORKDIR /app
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN apk add --no-cache ca-certificates curl tzdata
+# Upgrade packages already present in the base; reject mirrors missing the security fix.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' ca-certificates curl tzdata
 
-RUN set -eux; \
-    case "${TARGETARCH}" in \
-      amd64) cloudflared_arch="amd64" ;; \
-      386) cloudflared_arch="386" ;; \
-      arm64) cloudflared_arch="arm64" ;; \
-      arm) cloudflared_arch="arm" ;; \
-      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cloudflared_arch}" -o /usr/local/bin/cloudflared; \
-    chmod +x /usr/local/bin/cloudflared
+COPY --from=cloudflared-build /out/cloudflared /usr/local/bin/cloudflared
+COPY --from=cloudflared-build /src/cloudflared/LICENSE /usr/share/licenses/cloudflared/LICENSE
+RUN cloudflared --version
 
 COPY komari-${TARGETOS}-${TARGETARCH} /app/komari
 

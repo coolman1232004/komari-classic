@@ -1,42 +1,48 @@
 package terminal
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/komari-monitor/komari/web/api"
+	"github.com/komari-monitor/komari/web/connection"
+	"net/http"
 )
 
 func EstablishConnection(c *gin.Context) {
-	session_id := c.Query("id")
-	session, exists := TerminalSessions[session_id]
-	if !exists || session == nil || session.Browser == nil {
-		c.JSON(404, gin.H{"status": "error", "error": "Session not found"})
-		return
-	}
-	// Upgrade the connection to WebSocket
-	if !api.IsWebSocketUpgrade(c) {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "Require WebSocket upgrade"})
-		return
-	}
-	conn, err := api.UpgradeWebSocket(c)
-	if err != nil {
-		TerminalSessionsMutex.Lock()
-		if session.Browser != nil {
-			session.Browser.Close()
-		}
-		delete(TerminalSessions, session_id)
+	id := c.Query("id")
+	TerminalSessionsMutex.Lock()
+	s := TerminalSessions[id]
+	if s == nil || s.Browser == nil {
 		TerminalSessionsMutex.Unlock()
+		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	session.Agent = conn
-	conn.SetCloseHandler(func(code int, text string) error {
-		delete(TerminalSessions, session_id)
-		// 通知 Browser 关闭终端连接
-		if session.Browser != nil {
-			session.Browser.Close()
-		}
-		return nil
-	})
-	go ForwardTerminal(session_id)
+	if c.GetString("client_uuid") != s.UUID || s.claimed {
+		TerminalSessionsMutex.Unlock()
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+	s.claimed = true
+	TerminalSessionsMutex.Unlock()
+	valid := api.CredentialValidator(c)
+	if !valid() {
+		closeSession(id)
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	raw, err := api.UpgradeWebSocket(c)
+	if err != nil {
+		closeSession(id)
+		return
+	}
+	conn := connection.NewSafeConn(raw)
+	TerminalSessionsMutex.Lock()
+	if TerminalSessions[id] != s {
+		TerminalSessionsMutex.Unlock()
+		conn.Close()
+		return
+	}
+	s.Agent = conn
+	s.AgentValid = valid
+	TerminalSessionsMutex.Unlock()
+	go ForwardTerminal(id)
 }

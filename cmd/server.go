@@ -121,6 +121,7 @@ func RunServer() {
 	}
 
 	r := gin.New()
+	r.Use(security.SecurityHeaders())
 	r.Use(logutil.GinLogger())
 	r.Use(logutil.GinRecovery())
 
@@ -136,6 +137,7 @@ func RunServer() {
 	})
 	r.Use(security.CorsMiddleware(conf.CorsOriginCheckEnabled, conf.CorsAllowedOrigins))
 
+	r.Use(security.RequestBodyLimit())
 	r.Use(api.IdentityMiddleware())
 	r.Use(api.PrivateSiteMiddleware())
 
@@ -149,8 +151,11 @@ func RunServer() {
 	router.Register(r)
 
 	srv := &http.Server{
-		Addr:    flags.Listen,
-		Handler: r,
+		Addr:              flags.Listen,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 	log.Printf("Starting server on %s ...", flags.Listen)
 	go func() {

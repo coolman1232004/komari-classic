@@ -2,6 +2,7 @@ package nezha
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"io"
 	"log"
@@ -11,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/komari-monitor/komari/database/auditlog"
 	"github.com/komari-monitor/komari/database/dbcore"
 	"github.com/komari-monitor/komari/database/models"
 	"github.com/komari-monitor/komari/pkg/config"
@@ -23,9 +23,10 @@ import (
 
 	"github.com/komari-monitor/komari/web/nezha/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
-	"gorm.io/gorm/clause"
+	"google.golang.org/grpc/status"
 )
 
 // [Deprecated] Use StartNezhaCompat instead.
@@ -46,6 +47,8 @@ func StartNezhaCompatServer(addr string) error {
 	}
 	// Enable gRPC keepalive to tolerate long-idle streams
 	gs := grpc.NewServer(
+		grpc.MaxConcurrentStreams(64),
+		grpc.MaxRecvMsgSize(4<<20),
 		grpc.UnaryInterceptor(unary),
 		grpc.StreamInterceptor(stream),
 		// Keepalive: allow client pings and keep connections stable without app traffic
@@ -92,6 +95,8 @@ func StartNezhaCompat(addr string) error {
 		return handler(srvIface, ss)
 	}
 	gs := grpc.NewServer(
+		grpc.MaxConcurrentStreams(64),
+		grpc.MaxRecvMsgSize(4<<20),
 		grpc.UnaryInterceptor(unary),
 		grpc.StreamInterceptor(stream),
 		grpc.KeepaliveParams(keepalive.ServerParameters{Time: 2 * time.Minute, Timeout: 20 * time.Second}),
@@ -151,6 +156,10 @@ func getAuth(ctx context.Context) (uuid string, secret string, err error) {
 	if uuid == "" || secret == "" {
 		return "", "", errors.New("unauthorized: missing client_uuid/client_secret")
 	}
+	var client models.Client
+	if err := dbcore.GetDBInstance().Select("token").Where("uuid = ?", uuid).First(&client).Error; err != nil || client.Token == "" || subtle.ConstantTimeCompare([]byte(client.Token), []byte(secret)) != 1 {
+		return "", "", status.Error(codes.Unauthenticated, "invalid client credentials")
+	}
 	return uuid, secret, nil
 }
 
@@ -201,6 +210,9 @@ func (s *nezhaCompatServer) ReportSystemState(stream proto.NezhaService_ReportSy
 		if err != nil {
 			return err
 		}
+		if _, _, err := getAuth(ctx); err != nil {
+			return err
+		}
 		// refresh presence TTL on every frame
 		agent_runtime.KeepAlivePresence(uuid, connID, 30*time.Second)
 		if err := ingestState(uuid, st); err != nil {
@@ -238,6 +250,10 @@ func (s *nezhaCompatServer) RequestTask(stream proto.NezhaService_RequestTaskSer
 				recvErr <- rerr
 				return
 			}
+			if _, _, err := getAuth(ctx); err != nil {
+				recvErr <- err
+				return
+			}
 			// refresh presence TTL when result received
 			agent_runtime.KeepAlivePresence(uuid, connID, 30*time.Second)
 		}
@@ -250,6 +266,9 @@ func (s *nezhaCompatServer) RequestTask(stream proto.NezhaService_RequestTaskSer
 		case err := <-recvErr:
 			return err
 		case <-ticker.C:
+			if _, _, err := getAuth(ctx); err != nil {
+				return err
+			}
 			if err := stream.Send(&proto.Task{}); err != nil {
 				return err
 			}
@@ -259,16 +278,12 @@ func (s *nezhaCompatServer) RequestTask(stream proto.NezhaService_RequestTaskSer
 
 // Unimplemented methods intentionally left as default (IOStream, ReportGeoIP)
 
-// upsertClientFromHost maps Host into models.Client and upserts by UUID
+// upsertClientFromHost updates telemetry for a provisioned, authenticated node.
 func upsertClientFromHost(uuid, secret string, h *proto.Host) error {
 	db := dbcore.GetDBInstance()
 	now := models.FromTime(time.Now())
-	// token guard: if existing record has different token, reject
-	var exist models.Client
-	if err := db.Where("uuid = ?", uuid).First(&exist).Error; err == nil {
-		if exist.Token != "" && exist.Token != secret {
-			return errors.New("unauthorized: token mismatch")
-		}
+	if h == nil {
+		return status.Error(codes.InvalidArgument, "missing host")
 	}
 	cpuName := ""
 	if len(h.Cpu) > 0 {
@@ -287,9 +302,9 @@ func upsertClientFromHost(uuid, secret string, h *proto.Host) error {
 		return int64(v)
 	}
 	c := models.Client{
-		UUID:             uuid,
-		Token:            secret,
-		Name:             "nezha_" + uuid[0:8],
+		UUID:  uuid,
+		Token: secret,
+
 		CpuName:          cpuName,
 		Arch:             h.Arch,
 		CpuCores:         len(h.Cpu),
@@ -304,7 +319,7 @@ func upsertClientFromHost(uuid, secret string, h *proto.Host) error {
 		Version:          h.Version,
 		UpdatedAt:        now,
 	}
-	// Upsert by UUID; don't override existing Token if already set
+	// Update telemetry only; never create nodes or replace their credentials.
 	updates := map[string]interface{}{
 		"cpu_name":           c.CpuName,
 		"arch":               c.Arch,
@@ -320,10 +335,15 @@ func upsertClientFromHost(uuid, secret string, h *proto.Host) error {
 		"version":            c.Version,
 		"updated_at":         time.Now(),
 	}
-	return db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "uuid"}},
-		DoUpdates: clause.Assignments(updates),
-	}).Create(&c).Error
+	// Only an administrator-provisioned node with the current credential may update.
+	result := db.Model(&models.Client{}).Where("uuid = ? AND token = ? AND token <> ''", uuid, secret).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return status.Error(codes.Unauthenticated, "invalid client credentials")
+	}
+	return nil
 }
 
 // ingestState maps Nezha State into v1.Report then saves a Record
@@ -332,10 +352,7 @@ func ingestState(uuid string, st *proto.State) error {
 	db := dbcore.GetDBInstance()
 	var client models.Client
 	if err := db.Where("uuid = ?", uuid).First(&client).Error; err != nil {
-		// If missing, create with minimal defaults to avoid failing ingestion
-		client = models.Client{UUID: uuid, Token: "", Name: "nezha_" + uuid[0:8]}
-		auditlog.EventLog("info", "auto created client "+client.Name)
-		_ = db.Create(&client).Error
+		return status.Error(codes.Unauthenticated, "unknown client")
 	}
 	rep := v1.Report{
 		CPU:  v1.CPUReport{Usage: st.Cpu},

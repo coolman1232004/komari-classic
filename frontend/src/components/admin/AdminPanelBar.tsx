@@ -200,7 +200,7 @@ const AdminPanelBar = ({ content }: AdminPanelBarProps) => {
     async function loadReleases() {
       try {
         const resp = await fetch(
-          "https://api.github.com/repos/kadidalax/komari-classic/releases?per_page=100",
+          "https://api.github.com/repos/coolman1232004/komari-classic/releases?per_page=100",
           {
             headers: {
               Accept: "application/vnd.github+json",

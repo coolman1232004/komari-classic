@@ -98,7 +98,6 @@ func serveWebSocket(c *gin.Context) {
 	conn := connection.NewSafeConn(_conn)
 	defer conn.Close()
 
-	meta := buildContextMeta(c)
 	for {
 		var req rpc.JsonRpcRequest
 		if err := conn.ReadJSON(&req); err != nil {
@@ -116,7 +115,9 @@ func serveWebSocket(c *gin.Context) {
 			continue
 		}
 		// 同步写：SafeConn 内部有锁，串行写避免响应乱序与并发竞态。
-		conn.WriteJSON(dispatchWithSensitive(context.Background(), c, meta, &req))
+		api.SetPrincipal(c, api.IdentifyPrincipal(c))
+		meta := buildContextMeta(c)
+		conn.WriteJSON(dispatchWithSensitive(c.Request.Context(), c, meta, &req))
 	}
 }
 
@@ -129,6 +130,10 @@ func servePost(c *gin.Context) {
 	requests, jerr := rpc.ParseRequests(body)
 	if jerr != nil {
 		c.JSON(http.StatusBadRequest, jerr.Response())
+		return
+	}
+	if len(requests) > 100 {
+		c.JSON(http.StatusRequestEntityTooLarge, rpc.ErrorResponse(nil, rpc.InvalidRequest, "Batch limit is 100 requests", nil))
 		return
 	}
 	meta := buildContextMeta(c)

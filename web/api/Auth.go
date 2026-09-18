@@ -174,6 +174,11 @@ func extractClientToken(c *gin.Context) string {
 		return token
 	}
 
+	// Only legacy agent endpoints accept credentials inside the body.
+	// Never buffer arbitrary uploads while identifying an anonymous request.
+	if !strings.HasPrefix(c.Request.URL.Path, "/api/clients/") && c.Request.URL.Path != "/api/rpc2" {
+		return ""
+	}
 	if c.Request.Method != http.MethodGet {
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {

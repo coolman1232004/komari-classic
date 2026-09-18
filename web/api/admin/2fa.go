@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"github.com/komari-monitor/komari/utils"
 	"image/png"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/komari-monitor/komari/database/accounts"
@@ -15,13 +17,23 @@ func Generate2FA(c *gin.Context) {
 		api.RespondError(c, 500, "Failed to generate 2FA: "+err.Error())
 		return
 	}
-	c.SetCookie("2fa_secret", secret, 1800, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("2fa_secret", secret, 1800, "/", "", utils.GetScheme(c) == "https", true)
 	c.Header("Content-Type", "image/png")
 	c.Writer.WriteHeader(200)
 	png.Encode(c.Writer, img)
 }
 
 func Enable2FA(c *gin.Context) {
+	user, err := accounts.GetUserByUUID(c.GetString("uuid"))
+	if err != nil {
+		api.RespondError(c, 401, "User not found")
+		return
+	}
+	if user.TwoFactor != "" {
+		api.RespondError(c, 409, "Disable existing 2FA with its current code before replacing it")
+		return
+	}
 	uuid, _ := c.Get("uuid")
 	secret, _ := c.Cookie("2fa_secret")
 	code := c.Query("code")
@@ -33,12 +45,13 @@ func Enable2FA(c *gin.Context) {
 		api.RespondError(c, 400, "Invalid 2FA code")
 		return
 	}
-	err := accounts.Enable2Fa(uuid.(string), secret)
+	err = accounts.Enable2Fa(uuid.(string), secret)
 	if err != nil {
 		api.RespondError(c, 500, "Failed to enable 2FA: "+err.Error())
 		return
 	}
-	c.SetCookie("2fa_secret", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("2fa_secret", "", -1, "/", "", utils.GetScheme(c) == "https", true)
 
 	api.RespondSuccess(c, "2FA enabled successfully")
 }

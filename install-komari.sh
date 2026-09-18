@@ -31,7 +31,7 @@ SERVICE_NAME="komari"
 BINARY_PATH="$INSTALL_DIR/komari"
 DEFAULT_PORT="25774"
 LISTEN_PORT=""
-REPO="kadidalax/komari-classic"
+REPO="coolman1232004/komari-classic"
 # 发布通道: stable（稳定版）或 snapshot（快照版）
 CHANNEL="stable"
 # TUI 工具: whiptail / dialog / 空（回退纯文本）
@@ -163,7 +163,7 @@ show_banner() {
     clear
     echo "=============================================================="
     echo "            Komari Monitoring System Installer"
-    echo "       https://github.com/kadidalax/komari-classic"
+    echo "       https://github.com/coolman1232004/komari-classic"
     echo "=============================================================="
     echo
 }

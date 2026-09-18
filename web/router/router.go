@@ -98,7 +98,7 @@ func registerAdminRoutes(r *gin.Engine) {
 		theme.PUT("/upload", admin.UploadTheme)
 		theme.GET("/list", admin.ListThemes)
 		theme.POST("/delete", admin.DeleteTheme)
-		theme.GET("/set", admin.SetTheme)
+		theme.POST("/set", admin.SetTheme)
 		theme.POST("/update", admin.UpdateTheme)
 		theme.POST("/import", admin.ImportTheme)
 		theme.POST("/settings", admin.UpdateThemeSettings)
@@ -155,7 +155,6 @@ func registerAdminRoutes(r *gin.Engine) {
 		databaseGroup.GET("/size", jsonRpc.Bind("admin:getDatabaseSize"))
 		databaseGroup.POST("/vacuum", jsonRpc.Bind("admin:vacuumDatabase", jsonRpc.WithMessage("database vacuumed")))
 	}
-
 
 	// clients
 	clientGroup := g.Group("/client")

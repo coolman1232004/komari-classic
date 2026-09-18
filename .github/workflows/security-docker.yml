@@ -1,0 +1,67 @@
+name: Security and Docker regression checks
+on:
+  push:
+    branches: [codex/security-hardening]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: docker-check-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  docker:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and test server image from source
+        run: docker build -f Dockerfile.source --target tested -t komari-tested .
+      - name: Check concurrent connection handling
+        if: matrix.runner == 'ubuntu-latest'
+        run: docker run --rm komari-tested go test -race ./web/api/terminal ./web/connection ./web/api ./web/nezha ./web/rpc/jsonrpc
+      - name: Build runtime image
+        run: docker compose build
+      - name: Build and test agent image
+        run: |
+          docker build -f agent/Dockerfile.source --target tested -t agent-tested agent
+          docker build -f agent/Dockerfile.source -t komari-agent:test agent
+          docker run --rm komari-agent:test --help
+      - name: Smoke test Docker installation, authentication and persistence
+        run: |
+          mkdir -p data
+          docker compose run -d --service-ports --name komari-smoke -e ADMIN_USERNAME=ci-admin -e ADMIN_PASSWORD=ci-test-password komari
+          python3 scripts/docker-smoke.py
+          docker stop komari-smoke
+          sudo python3 scripts/docker-password-check.py --seed-legacy
+          docker start komari-smoke
+          python3 scripts/docker-smoke.py
+          sudo python3 scripts/docker-password-check.py
+          test -s data/komari.db
+      - name: Validate agent HTTPS trust store
+        run: docker run --rm --entrypoint sh komari-agent:test -c 'test -s /etc/ssl/certs/ca-certificates.crt && test -f /.komari-agent-container'
+      - name: Scan built images for known vulnerabilities
+        run: |
+          mkdir -p image-audit
+          docker save komari-classic:1.2.5-fix2-hardening -o image-audit/server.tar
+          docker save komari-agent:test -o image-audit/agent.tar
+          for component in server agent; do
+            docker run --rm -v "$PWD/image-audit:/scan" ghcr.io/aquasecurity/trivy:0.73.0 image --scanners vuln --input /scan/$component.tar --format json --output /scan/$component.json
+          done
+          python3 scripts/image-audit-summary.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: image-vulnerability-reports-${{ matrix.runner }}
+          path: image-audit/*.json
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ "${{ job.status }}" != "success" ]; then docker logs komari-smoke || true; fi
+          docker rm -f komari-smoke || true

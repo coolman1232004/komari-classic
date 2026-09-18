@@ -297,10 +297,10 @@ fi
 
 if [ -n "$github_proxy" ]; then
     # Use proxy for GitHub releases
-    download_url="${github_proxy}/https://github.com/kadidalax/komari-classic/releases/${download_path}/${file_name}"
+    download_url="${github_proxy}/https://github.com/coolman1232004/komari-classic/releases/${download_path}/${file_name}"
 else
     # Direct access to GitHub releases
-    download_url="https://github.com/kadidalax/komari-classic/releases/${download_path}/${file_name}"
+    download_url="https://github.com/coolman1232004/komari-classic/releases/${download_path}/${file_name}"
 fi
 
 log_step "Creating installation directory: ${GREEN}$target_dir${NC}"

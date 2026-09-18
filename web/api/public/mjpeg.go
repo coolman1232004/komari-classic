@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/komari-monitor/komari/database/models"
 	conf "github.com/komari-monitor/komari/pkg/config"
+	"github.com/komari-monitor/komari/web/api"
 	jsonRpc "github.com/komari-monitor/komari/web/rpc/jsonrpc"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
@@ -449,6 +450,10 @@ func (r *progressReader) Read(p []byte) (int, error) {
 
 // MjpegLiveHandler 处理 MJPEG 流请求
 func MjpegLiveHandler(c *gin.Context) {
+	if !api.CanReadLiveData(c) {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
 	initFont()
 
 	// 获取参数
@@ -479,6 +484,9 @@ func MjpegLiveHandler(c *gin.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if !api.CanReadLiveData(c) {
+				return
+			}
 			sendFrame(c.Writer, ctx, lang, tzOffset)
 		}
 	}

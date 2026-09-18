@@ -317,7 +317,7 @@ const AutoDiscoverySection = ({
     if (selectedPlatform === "windows") {
       scriptFile = "install.ps1";
     }
-    let scriptUrl = `https://raw.githubusercontent.com/kadidalax/komari-classic/refs/heads/main/agent/${scriptFile}`;
+    let scriptUrl = `https://raw.githubusercontent.com/coolman1232004/komari-classic/refs/heads/main/agent/${scriptFile}`;
     if (enableGhproxy && ghproxy) {
       scriptUrl = scriptUrl.slice(8); // 去掉 https://
       if (ghproxy.endsWith("/")) {
@@ -372,10 +372,11 @@ const AutoDiscoverySection = ({
         // 通过 bind mount 持久化该文件，容器更新重建后复用同一身份，避免重复注册。
         // 注意：文件挂载要求宿主机上文件已存在，否则 Docker 会将其创建为目录。
         finalCommand =
+          `docker build -f Dockerfile.source -t komari-classic-agent:1.2.5-fix2-hardening https://github.com/coolman1232004/komari-classic.git#58e61427b0c80ba6c7ce8e92f410df4dc85ad09f:agent && ` +
           `touch .komari-auto-discovery.json && ` +
           `docker run -d --name komari-agent --restart=always ` +
-          `-v .komari-auto-discovery.json:/app/auto-discovery.json ` +
-          `ghcr.io/kadidalax/komari-classic-agent:latest ` +
+          `-v "$(pwd)/.komari-auto-discovery.json:/app/auto-discovery.json" ` +
+          `komari-classic-agent:1.2.5-fix2-hardening ` +
           quoteShellArgs(dockerArgs);
         break;
       }
@@ -1525,7 +1526,7 @@ function GenerateCommandButton({ node, settings }: { node: NodeDetail, settings:
       scriptFile = "install.ps1";
     }
     let scriptUrl =
-      `https://raw.githubusercontent.com/kadidalax/komari-classic/refs/heads/main/agent/${scriptFile}`;
+      `https://raw.githubusercontent.com/coolman1232004/komari-classic/refs/heads/main/agent/${scriptFile}`;
     if (enableGhproxy) {
       if (enableGhproxy && ghproxy) {
         scriptUrl = scriptUrl.slice(8); // 去掉 https://
@@ -1577,8 +1578,9 @@ function GenerateCommandButton({ node, settings }: { node: NodeDetail, settings:
           dockerArgs.push(args[i]);
         }
         finalCommand =
+          `docker build -f Dockerfile.source -t komari-classic-agent:1.2.5-fix2-hardening https://github.com/coolman1232004/komari-classic.git#58e61427b0c80ba6c7ce8e92f410df4dc85ad09f:agent && ` +
           `docker run -d --name komari-agent --restart=always ` +
-          `ghcr.io/kadidalax/komari-classic-agent:latest ` +
+          `komari-classic-agent:1.2.5-fix2-hardening ` +
           quoteShellArgs(dockerArgs);
         break;
       }
