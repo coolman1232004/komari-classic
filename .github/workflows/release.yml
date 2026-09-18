@@ -81,6 +81,16 @@ jobs:
           path: ${{ matrix.context }}
           merge-multiple: true
 
+      # Older release tags exclude local server binaries in their source-build context.
+      # Override only the prebuilt Dockerfile context after downloading the artifacts.
+      - name: Include verified release server binaries in Docker context
+        if: matrix.component == 'server'
+        run: |
+          test -s komari-linux-amd64
+          test -s komari-linux-arm64
+          cp .dockerignore Dockerfile.dockerignore
+          printf '\n!komari-linux-amd64\n!komari-linux-arm64\n' >> Dockerfile.dockerignore
+
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 

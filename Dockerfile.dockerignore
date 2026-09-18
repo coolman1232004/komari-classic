@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/dist
+**/data
+work
+outputs
+*.zip
+komari-linux-*
+
+!komari-linux-amd64
+!komari-linux-arm64
