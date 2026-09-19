@@ -2,6 +2,8 @@
 
 更新：2026-09-18。
 
+此頁保留 Security 1 的歷史結果。Security 2 已修補此頁列出的兩筆低危告警；最新安裝及驗證見 [Security 2](RELEASE-SECURITY-2.md)。下方 Security 1 的映像及掃描數字不代表目前最新版本。
+
 ## 合併及版本
 
 PR #1 已合併至你的 GitHub 主分支 `main`。合併提交 `1e73d75fdcda74c7b24b99f7b0723850b15ef9e4` 與已通過測試的 `44c8f12a` 具有完全相同的程式碼樹。

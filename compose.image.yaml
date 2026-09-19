@@ -1,6 +1,6 @@
 services:
   komari:
-    image: ghcr.io/coolman1232004/komari-classic:v1.2.5-fix2-security.1@sha256:c778e536445f262f967e1a699ca72fabef010f04c7fd5f6fafedff81d094e308
+    image: ghcr.io/coolman1232004/komari-classic:v1.2.5-fix2-security.2@sha256:34fab72ca869f7f58895e6916cc490cbccf9eb1bef40af771dff58be163a1701
     container_name: komari-classic-security
     restart: unless-stopped
     ports:
