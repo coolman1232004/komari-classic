@@ -2,6 +2,8 @@
 
 This branch preserves the 1.2.5-fix2 feature set and adds targeted security and Docker changes. It is not a guarantee that all vulnerabilities have been found. Review date: 2026-09-16.
 
+This document preserves the baseline comparison and early review history. Findings below describe issues addressed during development, not a list of unresolved issues in the current release. See [Security 2](RELEASE-SECURITY-2.md) for the final published-image results dated 2026-09-19 and remaining findings.
+
 ## Preserved baseline
 
 The untouched baseline is commit `ea2d85b52ccbb211c144235b9cb51b67d4380cd8`, saved in `coolman1232004/komari-classic` before development.
@@ -14,7 +16,7 @@ The untouched baseline is commit `ea2d85b52ccbb211c144235b9cb51b67d4380cd8`, sav
 
 Counts compare SHA-256 of upstream file contents against their mapped paths in Classic. New Classic-only files are not included in these counts. The comparison is against **1.2.5-fix2**, not the earlier plain 1.2.5 release.
 
-All upstream server Go files and dependency locks match. Server differences are documentation, installation and build workflows. The five changed frontend source files change repository/readme links, release queries, installer URLs and agent Docker image names. The agent updater changes its repository and filters release assets by the agent prefix. Thus the monitoring implementation is preserved, but installation/update behavior is changed; the repository is not byte-identical upstream.
+In the preserved baseline, all upstream server Go files and dependency locks match. Baseline server differences are documentation, installation and build workflows. The five changed frontend source files change repository/readme links, release queries, installer URLs and agent Docker image names. The baseline agent updater changes its repository and filters release assets by the agent prefix. Thus the baseline preserves the monitoring implementation but changes installation/update behavior; it is not byte-identical upstream. These comparison results predate this fork's subsequent security changes.
 
 ## Findings addressed in this branch
 

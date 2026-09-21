@@ -2,6 +2,8 @@
 
 This is a source review with regression tests and dependency/container scanning, not a certification or a promise of zero vulnerabilities. The untouched upstream-derived baseline remains at tag `v1.2.5-fix2`; PR #1 has been reviewed and merged into `main`. Deployment on the owner's actual VPS has not been inspected.
 
+This document records the historical review and remediation work. The findings and intermediate scan counts below are not the current release's unresolved-issue list. For final published-image results dated 2026-09-19 and remaining findings, see [Security 2](RELEASE-SECURITY-2.md).
+
 ## Changes from the first hardening pass
 
 | Area | Finding and mitigation | Regression evidence |

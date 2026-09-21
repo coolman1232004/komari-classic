@@ -25,13 +25,13 @@ docker compose logs komari
 
 [發佈與驗證結果](https://github.com/coolman1232004/komari-classic/releases/tag/v1.2.5-fix2-security.2) · [詳細 Docker／備份說明](docs/DOCKER.md) · [安全檢查範圍及限制](docs/SECURITY-AUDIT-2026-09.md)
 
-## 安全結論
+## 安全與維護
 
-修正涵蓋探針身份及欄位隔離、Nezha 相容接口驗證、Session／RPC／終端權限重驗、Argon2id 密碼升級、登入與 TOTP 限流、OAuth state、ZIP 解壓、主題下載、秘密日誌、cloudflared 和 OpenSSL 依賴。
+本版本已進行安全強化，並於 2026-09-19 完成 AMD64／ARM64 正式 Docker 映像的拉取、安裝及回歸驗證。檢查範圍、掃描結果及已知限制見 [Security 2 紀錄](docs/RELEASE-SECURITY-2.md)。這些紀錄反映當時的檢查結果，不代表零漏洞保證。
 
-實際發佈映像在 AMD64／ARM64 都通過匿名拉取與安裝驗證。2026-09-19 最終映像掃描：服務端 0 高危／嚴重、0 中危、0 低危、2 未分類；探針 0。Security 2 已升級 OpenTelemetry 至 1.45.0，修補先前兩筆低危告警。未分類告警針對未匯入的 OpenPGP 套件，沒有修補版本；完整證據及限制見 [Security 2 紀錄](docs/RELEASE-SECURITY-2.md)。
+部署時請使用 HTTPS、獨立強密碼及雙重驗證，妥善管理主機與存取權限，並定期備份。請勿公開密碼、探針 token、私鑰、含憑證的日誌或資料備份。
 
-安全掃描通過不等於零漏洞。實際 VPS、防火牆、代理、主題與憑證仍需要妥善管理。功能版本可以固定，安全依賴及 Docker 基底仍需定期檢視。二進位自動更新器已停用，更新需更換經驗證的映像。
+功能版本固定，安全依賴與 Docker 基底仍需定期檢視。二進位自動更新器已停用，更新請更換經驗證的固定版本映像；操作前保留資料備份。詳見 [Docker 與備份說明](docs/DOCKER.md)。
 
 ## 源碼建置與來源
 
