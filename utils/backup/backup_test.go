@@ -41,6 +41,9 @@ INSERT INTO ping_records VALUES ('node', '2026-09-01');`)
 	if err := os.WriteFile(filepath.Join(dir, "settings.txt"), []byte("backup settings"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Mkdir(filepath.Join(dir, "empty-theme-directory"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	var buf bytes.Buffer
 	if err := Write(&buf, dir, "v1.2.5-fix2-security.3"); err != nil {
 		t.Fatal(err)
@@ -72,6 +75,9 @@ func TestRestorePreservesRollbackAndRevokesSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertContents(t, filepath.Join(data, "settings.txt"), "backup settings")
+	if info, err := os.Stat(filepath.Join(data, "empty-theme-directory")); err != nil || !info.IsDir() {
+		t.Fatal("empty directory was lost")
+	}
 	if _, err := os.Stat(filepath.Join(data, "komari.db-wal")); !os.IsNotExist(err) {
 		t.Fatal("stale WAL survived")
 	}
@@ -193,8 +199,8 @@ func TestRejectedBackupsNeverTouchLiveData(t *testing.T) {
 }
 
 func TestRestoreRollsBackMoveFailures(t *testing.T) {
-	// Fail each move of two original files and two replacement files.
-	for failAt := 1; failAt <= 4; failAt++ {
+	// Fail each move of two original files and three replacement entries.
+	for failAt := 1; failAt <= 5; failAt++ {
 		t.Run(string(rune('0'+failAt)), func(t *testing.T) {
 			data := t.TempDir()
 			put(t, filepath.Join(data, "komari.db"), []byte("original"))
@@ -213,9 +219,20 @@ func TestRestoreRollsBackMoveFailures(t *testing.T) {
 			}
 			assertContents(t, filepath.Join(data, "komari.db"), "original")
 			assertContents(t, filepath.Join(data, "settings.txt"), "original settings")
-			if _, err := os.Stat(filepath.Join(data, JournalName)); !os.IsNotExist(err) {
-				t.Fatal("rollback left active journal")
+			if _, err := os.Stat(filepath.Join(data, JournalName)); err != nil {
+				t.Fatal("rollback must retain the journal to stop automatic retries")
 			}
+			before, _ := os.ReadDir(filepath.Join(data, HistoryName))
+			for restart := 0; restart < 3; restart++ {
+				if err := ApplyPending(data, filepath.Join(data, "komari.db")); err == nil {
+					t.Fatal("automatic restart retried a failed restore")
+				}
+			}
+			after, _ := os.ReadDir(filepath.Join(data, HistoryName))
+			if len(before) != len(after) {
+				t.Fatal("automatic restart created more restore directories")
+			}
+			assertContents(t, filepath.Join(data, "komari.db"), "original")
 		})
 	}
 }

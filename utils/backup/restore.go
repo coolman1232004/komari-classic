@@ -63,12 +63,17 @@ func applyPending(dataDir, databaseFile string, rename func(string, string) erro
 	if err != nil {
 		return err
 	}
+	preserveTransaction := false
+	defer func() {
+		if !preserveTransaction {
+			os.RemoveAll(txn)
+		}
+	}()
 	stage, previous := filepath.Join(txn, "new"), filepath.Join(txn, "previous")
 	if err := os.Mkdir(stage, 0700); err != nil {
 		return err
 	}
 	if err := Stage(pending, stage); err != nil {
-		os.RemoveAll(txn)
 		return fmt.Errorf("backup rejected; original data unchanged: %w", err)
 	}
 	if err := os.Mkdir(previous, 0700); err != nil {
@@ -96,6 +101,7 @@ func applyPending(dataDir, databaseFile string, rename func(string, string) erro
 	if err != nil {
 		return err
 	}
+	preserveTransaction = true
 	err = json.NewEncoder(f).Encode(struct {
 		Transaction string   `json:"transaction"`
 		OldFiles    []string `json:"old_files"`
@@ -126,15 +132,13 @@ func applyPending(dataDir, databaseFile string, rename func(string, string) erro
 				failures = append(failures, err)
 			}
 		}
-		if len(failures) == 0 {
-			if err := os.Remove(journal); err != nil {
-				failures = append(failures, err)
-			}
-		}
 		if len(failures) > 0 {
 			return fmt.Errorf("restore failed (%v); manual recovery required using %s: %w", cause, journal, errors.Join(failures...))
 		}
-		return fmt.Errorf("restore failed; original data restored, pending archive retained: %w", cause)
+		// Keep the journal even after a successful rollback. An automatic Docker
+		// restart must not repeatedly extract the same archive and fill the volume
+		// while the filesystem error remains unresolved.
+		return fmt.Errorf("restore failed; original data restored, pending archive retained; automatic retry blocked by %s: %w", journal, cause)
 	}
 	for _, name := range oldNames {
 		if err := rename(filepath.Join(dataDir, name), filepath.Join(previous, name)); err != nil {

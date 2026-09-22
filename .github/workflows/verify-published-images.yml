@@ -5,7 +5,7 @@ on:
       tag:
         description: Published immutable release tag to pull and verify
         required: true
-        default: v1.2.5-fix2-security.3
+        default: v1.2.5-fix2-security.3.1
         type: string
 permissions:
   contents: read

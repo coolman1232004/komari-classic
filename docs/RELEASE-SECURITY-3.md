@@ -1,5 +1,7 @@
 # Security 3: backup integrity and explicit proxy trust
 
+Install the final patch tag `v1.2.5-fix2-security.3.1`. The initial `security.3` candidate was superseded during final review; its tag is retained for traceability and its server-image publication was cancelled. The final patch also prevents repeated extraction after a failed restore and preserves empty backup directories.
+
 This update keeps the Classic 1.2.5-fix2 application family. It changes backup handling and how client IP addresses are trusted. It does not migrate upstream 1.2.7 history or recover records missing from an earlier import.
 
 ## Backup changes
@@ -9,7 +11,7 @@ This update keeps the Classic 1.2.5-fix2 application family. It changes backup h
 - Backups exported before Security 3, including Security 1/2 and upstream 1.2.7 backups, are rejected by the automatic importer. Keep those originals for separate recovery/migration. Do not add or edit a manifest to bypass the restriction.
 - Restoring replaces accounts, password hashes, MFA secrets, agent tokens, settings and data with the backup's values. Browser sessions are revoked. Use only your own trusted backups: checksums detect corruption, not a malicious administrator who can rewrite both the payload and manifest.
 - The previous installation, including its SQLite WAL/SHM files, is retained under `/app/data/.komari-restore/restore-*/previous` on the persistent data volume. The uploaded source ZIP is retained beside it. These private recovery files are excluded from subsequent exports.
-- Ordinary file-move errors trigger rollback. An interrupted restore leaves `/app/data/.restore-in-progress`; startup stops instead of opening a partial or empty database. This is a staged multi-file replacement, not an atomic filesystem transaction or a guarantee against storage/power failure.
+- Ordinary file-move errors trigger rollback. Failed or interrupted restores retain `/app/data/.restore-in-progress`; startup stops instead of opening a partial database or repeatedly extracting the same archive during Docker restart loops. Recovery requires an operator to address the error first. This is a staged multi-file replacement, not an atomic filesystem transaction or a guarantee against storage/power failure.
 - Custom database locations are rejected by the automatic importer. Extra database files such as an upstream `metrics.db` cause export/import to fail explicitly rather than silently omitting that database. Existing upload and expansion limits remain 512 MiB compressed / 2 GiB expanded / 10,000 entries.
 
 Upgrading a running Classic installation does not itself restore a backup. Keep a stopped-volume copy and the current image before upgrading, then export a fresh backup with the new version. Leave a working upstream installation and its full backup intact until any migration is separately verified.

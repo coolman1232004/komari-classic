@@ -79,7 +79,8 @@ func Write(w io.Writer, root, version string) error {
 			return fmt.Errorf("reserved backup path: %s", rel)
 		}
 		if info.IsDir() {
-			return nil
+			_, err := z.Create(filepath.ToSlash(rel) + "/")
+			return err
 		}
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("backup cannot include special files")
