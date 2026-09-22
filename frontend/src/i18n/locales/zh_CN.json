@@ -911,6 +911,7 @@
       "backup_download_description": "将服务器数据下载到本地",
       "backup_restore": "恢复备份",
       "backup_restore_description": "从文件恢复备份，将覆盖当前数据。",
+      "backup_restore_confirm": "这会替换所有数据，包括账号、密码、两步验证密钥及探针 Token。旧登录 Session 会失效。只可恢复自己信任的 Classic Security 3 或之后版本备份，旧版及上游备份需要另行迁移。确定继续？",
       "backup_restore_error": "恢复备份失败",
       "cors_allowed_origins": "API CORS 允许列表",
       "cors_allowed_origins_description": "每行或用逗号分隔一个 Origin，例如 https://example.com",

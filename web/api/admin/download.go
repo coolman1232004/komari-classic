@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"archive/zip"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/komari-monitor/komari/cmd/flags"
 	"github.com/komari-monitor/komari/database/dbcore"
+	"github.com/komari-monitor/komari/utils"
+	"github.com/komari-monitor/komari/utils/backup"
 	"github.com/komari-monitor/komari/web/api"
 )
 
@@ -67,12 +68,26 @@ func copyDataToTempExcludingDB(tempDir string) error {
 			return nil
 		}
 
-		// 跳过数据库相关文件
-		name := info.Name()
-		if strings.HasSuffix(strings.ToLower(name), ".db") ||
-			strings.HasSuffix(strings.ToLower(name), ".db-wal") ||
-			strings.HasSuffix(strings.ToLower(name), ".db-shm") {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("backup cannot include symlinks")
+		}
+		if backup.Reserved(rel) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
+		}
+		// A VACUUM snapshot replaces only our primary database. Never silently
+		// discard an additional metrics database from a different version.
+		name := strings.ToLower(rel)
+		if name == "komari.db" || name == "komari.db-wal" || name == "komari.db-shm" || name == "komari.db-journal" {
+			return nil
+		}
+		if strings.HasSuffix(name, ".db") || strings.HasSuffix(name, "-wal") || strings.HasSuffix(name, "-shm") || strings.HasSuffix(name, "-journal") {
+			return fmt.Errorf("additional database files require a separate migration backup")
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return fmt.Errorf("backup cannot include special files")
 		}
 
 		dst := filepath.Join(tempDir, rel)
@@ -141,70 +156,29 @@ func DownloadBackup(c *gin.Context) {
 		}
 	}
 
-	// 4) 开始写出 ZIP（以临时目录为根）
-	backupFileName := fmt.Sprintf("backup-%d.zip", time.Now().UnixMicro())
-	c.Writer.Header().Set("Content-Type", "application/zip")
-	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", backupFileName))
-
-	zipWriter := zip.NewWriter(c.Writer)
-	defer zipWriter.Close()
-
-	// 写入临时目录里的内容
-	err = filepath.Walk(tempDir, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(tempDir, p)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-		// zip 内路径统一正斜杠
-		zipPath := filepath.ToSlash(rel)
-		if info.IsDir() {
-			_, err := zipWriter.CreateHeader(&zip.FileHeader{
-				Name:     zipPath + "/",
-				Method:   zip.Deflate,
-				Modified: info.ModTime(),
-			})
-			return err
-		}
-		f, err := os.Open(p)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		w, err := zipWriter.CreateHeader(&zip.FileHeader{
-			Name:     zipPath,
-			Method:   zip.Deflate,
-			Modified: info.ModTime(),
-		})
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(w, f)
-		return err
-	})
+	// Complete the ZIP before sending headers, so failures cannot produce a
+	// success response containing a partial archive.
+	archive, err := os.CreateTemp("", "komari-download-*.zip")
 	if err != nil {
-		api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error archiving temp folder: %v", err))
+		api.RespondError(c, 500, "Cannot prepare backup archive")
 		return
 	}
-
-	// 5) 追加备份标记文件（放在 zip 根目录）
-	markupContent := "此文件为 Komari 备份标记文件，请勿删除。\nThis is a Komari backup markup file, please do not delete.\n\n备份时间 / Backup Time: " + time.Now().Format(time.RFC3339)
-	markupWriter, err := zipWriter.CreateHeader(&zip.FileHeader{
-		Name:     "komari-backup-markup",
-		Method:   zip.Deflate,
-		Modified: time.Now(),
-	})
+	defer os.Remove(archive.Name())
+	err = backup.Write(archive, tempDir, utils.CurrentVersion)
+	closeErr := archive.Close()
+	if err != nil || closeErr != nil {
+		api.RespondError(c, 500, "Cannot complete backup archive")
+		return
+	}
+	checkDir, err := os.MkdirTemp("", "komari-backup-check-*")
 	if err != nil {
-		api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error creating backup markup file: %v", err))
+		api.RespondError(c, 500, "Cannot validate backup archive")
 		return
 	}
-	if _, err = markupWriter.Write([]byte(markupContent)); err != nil {
-		api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error writing backup markup file: %v", err))
+	defer os.RemoveAll(checkDir)
+	if err := backup.Stage(archive.Name(), checkDir); err != nil {
+		api.RespondError(c, 500, "Backup validation failed: "+err.Error())
 		return
 	}
+	c.FileAttachment(archive.Name(), fmt.Sprintf("backup-%d.zip", time.Now().UnixMicro()))
 }

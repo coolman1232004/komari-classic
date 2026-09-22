@@ -911,6 +911,7 @@
       "backup_download_description": "將伺服器資料下載到本地",
       "backup_restore": "恢復備份",
       "backup_restore_description": "從文件恢復備份，將覆蓋當前資料。",
+      "backup_restore_confirm": "這會取代所有資料，包括帳號、密碼、兩步驗證密鑰及探針 Token。舊登入 Session 會失效。只可還原自己信任的 Classic Security 3 或之後版本備份，舊版及上游備份需要另行遷移。確定繼續？",
       "backup_restore_error": "恢復備份失敗",
       "cors_allowed_origins": "API CORS 允許列表",
       "cors_allowed_origins_description": "每行或用逗號分隔一個 Origin，例如 https://example.com",

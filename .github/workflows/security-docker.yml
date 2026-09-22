@@ -44,6 +44,8 @@ jobs:
           python3 scripts/docker-smoke.py
           sudo python3 scripts/docker-password-check.py
           test -s data/komari.db
+      - name: Verify backup rejection and restoration against the running image
+        run: python3 scripts/docker-backup-check.py
       - name: Validate agent HTTPS trust store
         run: docker run --rm --entrypoint sh komari-agent:test -c 'test -s /etc/ssl/certs/ca-certificates.crt && test -f /.komari-agent-container'
       - name: Scan built images for known vulnerabilities

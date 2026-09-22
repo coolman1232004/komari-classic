@@ -5,7 +5,7 @@ on:
       tag:
         description: Published immutable release tag to pull and verify
         required: true
-        default: v1.2.5-fix2-security.1
+        default: v1.2.5-fix2-security.3
         type: string
 permissions:
   contents: read
@@ -44,6 +44,8 @@ jobs:
           sudo python3 scripts/docker-password-check.py
           docker run --rm --entrypoint cloudflared "${IMAGE_BASE}:${RELEASE_TAG}" --version
           docker run --rm --entrypoint sh komari-agent:test -c 'test -s /etc/ssl/certs/ca-certificates.crt && test -f /.komari-agent-container'
+      - name: Verify published image backup and restore
+        run: python3 scripts/docker-backup-check.py
       - name: Scan the actual published images
         run: |
           docker save komari-classic:1.2.5-fix2-hardening -o image-audit/server.tar

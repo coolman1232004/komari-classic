@@ -18,8 +18,8 @@ type loginLimiter struct {
 
 var passwordLoginLimiter = &loginLimiter{windows: make(map[[32]byte]loginWindow)}
 
-// Use the socket peer, never arbitrary X-Forwarded-For headers. Deployments
-// behind a proxy share its peer budget; the account/global budgets still apply.
+// The caller supplies the socket peer or an address validated against the
+// explicitly configured proxy list. Account/global budgets always apply.
 func (l *loginLimiter) allow(remoteAddr, username string, now time.Time) bool {
 	peer, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {

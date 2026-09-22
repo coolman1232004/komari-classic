@@ -33,6 +33,7 @@ export default function SiteSettings() {
       return;
     }
 
+    if (!window.confirm(t("settings.site.backup_restore_confirm", "This replaces all data, including accounts, passwords, MFA secrets and agent tokens. Existing browser sessions will be revoked. Only restore your own trusted Classic Security 3 or later backup. Continue?"))) return;
     setRestoring(true);
     setRestoreProgress(0);
     const formData = new FormData();

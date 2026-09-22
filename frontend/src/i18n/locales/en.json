@@ -911,6 +911,7 @@
       "backup_download_description": "Download server data to local",
       "backup_restore": "Restore backup",
       "backup_restore_description": "Restoring a backup from a file will overwrite the current data.",
+      "backup_restore_confirm": "This replaces all data, including accounts, passwords, MFA secrets and agent tokens. Existing browser sessions will be revoked. Only restore your own trusted Classic Security 3 or later backup. Legacy and upstream backups require separate migration. Continue?",
       "backup_restore_error": "Restore backup failed",
       "cors_allowed_origins": "API CORS allowed origins",
       "cors_allowed_origins_description": "One origin per line or separated by commas, e.g., https://example.com",

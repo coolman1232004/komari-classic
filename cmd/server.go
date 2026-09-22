@@ -121,6 +121,9 @@ func RunServer() {
 	}
 
 	r := gin.New()
+	if err := security.ConfigureTrustedProxies(r, os.Getenv("KOMARI_TRUSTED_PROXIES")); err != nil {
+		log.Fatalf("Invalid trusted proxy configuration: %v", err)
+	}
 	r.Use(security.SecurityHeaders())
 	r.Use(logutil.GinLogger())
 	r.Use(logutil.GinRecovery())

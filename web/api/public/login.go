@@ -11,6 +11,7 @@ import (
 	"github.com/komari-monitor/komari/pkg/config"
 	"github.com/komari-monitor/komari/utils"
 	"github.com/komari-monitor/komari/web/api"
+	"github.com/komari-monitor/komari/web/security"
 
 	"github.com/gin-gonic/gin"
 )
@@ -63,7 +64,7 @@ func Login(c *gin.Context) {
 		return
 	}
 	// Count before password/2FA validation, including successful attempts.
-	if !passwordLoginLimiter.allow(c.Request.RemoteAddr, data.Username, time.Now()) {
+	if !passwordLoginLimiter.allow(security.LoginClientAddress(c), data.Username, time.Now()) {
 		c.Header("Retry-After", "300")
 		api.RespondError(c, http.StatusTooManyRequests, "Too many login attempts; try again later")
 		return

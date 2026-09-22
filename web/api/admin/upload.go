@@ -1,9 +1,7 @@
 package admin
 
 import (
-	"archive/zip"
 	"fmt"
-	"github.com/komari-monitor/komari/utils/safearchive"
 	"io"
 	"log"
 	"net/http"
@@ -14,117 +12,78 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/komari-monitor/komari/cmd/flags"
+	"github.com/komari-monitor/komari/utils/backup"
 	"github.com/komari-monitor/komari/web/api"
 )
 
-// 只有一个备份恢复操作在进行
 var restoreMutex sync.Mutex
 
-// UploadBackup 用于接收上传的备份文件并将其内容恢复到原始位置
+// UploadBackup validates completely before queueing a restore. Queued archives
+// cannot be overwritten by another request during the restart delay.
 func UploadBackup(c *gin.Context) {
-	// 尝试获取锁，如果已有恢复操作在进行，则立即返回错误
 	if !restoreMutex.TryLock() {
-		api.RespondError(c, http.StatusConflict, "Another restore operation is already in progress")
+		api.RespondError(c, 409, "Another restore is in progress")
 		return
 	}
 	defer restoreMutex.Unlock()
-
-	// 获取上传的文件
+	finalPath := filepath.Join("data", backup.PendingName)
+	if _, err := os.Lstat(finalPath); !os.IsNotExist(err) {
+		api.RespondError(c, 409, "A pending restore already exists")
+		return
+	}
+	if !flags.IsSQLite() || !backup.DefaultDatabase("./data", flags.DatabaseFile) {
+		api.RespondError(c, 400, "Restore requires the default data/komari.db database location")
+		return
+	}
 	file, header, err := c.Request.FormFile("backup")
 	if err != nil {
-		api.RespondError(c, http.StatusBadRequest, fmt.Sprintf("Error getting uploaded file: %v", err))
+		api.RespondError(c, 400, "Cannot read backup upload")
 		return
 	}
 	defer file.Close()
-
-	// 检查文件是否为zip格式
 	if !strings.HasSuffix(strings.ToLower(header.Filename), ".zip") {
-		api.RespondError(c, http.StatusBadRequest, "Uploaded file must be a ZIP archive")
+		api.RespondError(c, 400, "Backup must be a ZIP archive")
 		return
 	}
-
-	// 确保data目录存在
-	if err := os.MkdirAll("./data", 0755); err != nil {
-		api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error creating data directory: %v", err))
+	if err := os.MkdirAll("./data", 0700); err != nil {
+		api.RespondError(c, 500, "Cannot prepare data directory")
 		return
 	}
-
-	// 创建临时文件保存上传的zip（先校验，再落地到固定位置）
-	tempFile, err := os.CreateTemp("", "backup-upload-*.zip")
+	temp, err := os.CreateTemp("./data", ".backup-upload-*.zip")
 	if err != nil {
-		api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error creating temporary file: %v", err))
+		api.RespondError(c, 500, "Cannot stage backup upload")
 		return
 	}
-	tempFilePath := tempFile.Name()
-	defer os.Remove(tempFilePath) // 确保临时文件最终被删除
-
-	// 将上传的文件内容复制到临时文件
-	_, err = io.Copy(tempFile, file)
+	defer os.Remove(temp.Name())
+	_, err = io.Copy(temp, file)
+	if err == nil {
+		err = temp.Sync()
+	}
+	closeErr := temp.Close()
+	if err != nil || closeErr != nil {
+		api.RespondError(c, 500, "Cannot save backup upload")
+		return
+	}
+	stage, err := os.MkdirTemp("", "komari-restore-check-*")
 	if err != nil {
-		tempFile.Close()
-		api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error saving uploaded file: %v", err))
+		api.RespondError(c, 500, "Cannot prepare backup validation")
 		return
 	}
-	tempFile.Close() // 关闭文件以便后续操作
-
-	// 基础校验：检查是否包含标记文件
-	if zr, err := zip.OpenReader(tempFilePath); err == nil {
-		if err := safearchive.Validate(zr.File); err != nil {
-			zr.Close()
-			api.RespondError(c, 400, "Unsafe backup archive: "+err.Error())
-			return
-		}
-		hasMarkup := false
-		for _, f := range zr.File {
-			if f.Name == "komari-backup-markup" {
-				hasMarkup = true
-				break
-			}
-		}
-		zr.Close()
-		if !hasMarkup {
-			api.RespondError(c, http.StatusBadRequest, "Invalid backup file: missing komari-backup-markup file")
-			return
-		}
-	} else {
-		api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error opening zip file: %v", err))
+	defer os.RemoveAll(stage)
+	if err := backup.Stage(temp.Name(), stage); err != nil {
+		api.RespondError(c, 400, fmt.Sprintf("Backup rejected: %v", err))
 		return
 	}
-
-	// 将校验通过的临时文件移动到固定路径 ./data/backup.zip
-	finalPath := filepath.Join(".", "data", "backup.zip")
-	// 如存在旧文件，先删除
-	_ = os.Remove(finalPath)
-	if err := os.Rename(tempFilePath, finalPath); err != nil {
-		// fallback：拷贝
-		in, err2 := os.Open(tempFilePath)
-		if err2 != nil {
-			api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error preparing backup file: %v", err))
-			return
-		}
-		defer in.Close()
-		out, err2 := os.Create(finalPath)
-		if err2 != nil {
-			api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error creating target backup file: %v", err2))
-			return
-		}
-		if _, err2 = io.Copy(out, in); err2 != nil {
-			out.Close()
-			api.RespondError(c, http.StatusInternalServerError, fmt.Sprintf("Error writing target backup file: %v", err2))
-			return
-		}
-		out.Close()
+	// Hard linking a fully written file provides an atomic, exclusive publish on
+	// the same volume. Fail safely on filesystems that do not support this.
+	if err := os.Link(temp.Name(), finalPath); err != nil {
+		api.RespondError(c, 500, "Cannot queue restore; check the data volume and pending restore")
+		return
 	}
-
-	// 返回：已保存备份，重启后将自动恢复
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"message": "Backup uploaded successfully. The service will restart and apply the backup.",
-		"path":    "./data/backup.zip",
-	})
-
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Backup validated and queued. The service will restart; sign in with the backup's account after restoration."})
 	go func() {
-		log.Println("Backup uploaded, restarting service in 2 seconds to apply on startup...")
+		log.Println("Validated backup queued; restarting to restore before database initialization")
 		time.Sleep(2 * time.Second)
 		os.Exit(0)
 	}()
