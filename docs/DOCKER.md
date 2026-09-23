@@ -2,12 +2,12 @@
 
 For a prebuilt image, follow the [repository README](../README.md) and use `compose.image.yaml`. It pins the published multi-architecture digest, uses a separate volume and binds to localhost port 25775. The steps below remain available for source builds.
 
-**Do not directly downgrade a 1.2.7 backup into this version.** See [release and compatibility notes](RELEASE-SECURITY-2.md).
+**Do not directly downgrade a 1.2.7 backup into this version.** See [release and compatibility notes](RELEASE-SECURITY-3.md).
 
 The unchanged baseline remains at tag `v1.2.5-fix2`; the hardened version has been merged into `main`. For a source build:
 
 ```sh
-git clone --branch v1.2.5-fix2-security.2 https://github.com/coolman1232004/komari-classic.git
+git clone --branch v1.2.5-fix2-security.3.1 https://github.com/coolman1232004/komari-classic.git
 cd komari-classic
 docker compose up -d --build
 docker compose logs komari
@@ -17,7 +17,7 @@ The server binds to `127.0.0.1:25774` by default. Put an HTTPS reverse proxy in 
 
 Initial administrator credentials appear in startup logs. Log in, choose a unique password and enable 2FA. Data stays in `./data`. Do not mount the Docker socket or use privileged mode for the server. The Compose configuration prevents privilege escalation and rotates logs. Default Docker filesystem capabilities are retained for compatibility with existing bind-mounted data directories.
 
-This builds the UI and server inside Docker; Go and Node are not required on the host. The existing release Dockerfile remains available for prebuilt release binaries. Prebuilt server and agent images are published under the owner coolman1232004 with version v1.2.5-fix2-security.2. The source build remains available independently of GHCR.
+This builds the UI and server inside Docker; Go and Node are not required on the host. The existing release Dockerfile remains available for prebuilt release binaries. Prebuilt server and agent images are published under the owner coolman1232004 with version v1.2.5-fix2-security.3.1. The source build remains available independently of GHCR.
 
 ## Agent image
 
@@ -36,7 +36,7 @@ Before changing versions, stop the server and copy the entire `data` directory. 
 
 To roll back, stop the server, restore the matching data backup and use the saved previous image. Do not point an older version at a newer-version database without a matching backup. Successful password verification upgrades old password hashes to Argon2id; old binaries cannot verify these new hashes. Avoid unattended `latest` image replacement. After a tested build, deploy the recorded image ID/digest or an immutable release tag.
 
-Password login allows 10 attempts per account per five minutes, 20 per client IP per minute and 60 per server per minute, including 2FA attempts. On HTTP 429, wait for the Retry-After interval. Limits reset when the server process restarts. By default the client IP is the socket peer, so reverse-proxy users share that budget. Source builds containing Security 3 can use an explicit `KOMARI_TRUSTED_PROXIES` configuration; see [the proxy and backup upgrade notes](RELEASE-SECURITY-3.md). Password migration does not change the password or remove 2FA. Use a password reset for dormant accounts that will not log in to migrate.
+Password login allows 10 attempts per account per five minutes, 20 per client IP per minute and 60 per server per minute, including 2FA attempts. On HTTP 429, wait for the Retry-After interval. Limits reset when the server process restarts. By default the client IP is the socket peer, so reverse-proxy users share that budget. Security 3 can use an explicit `KOMARI_TRUSTED_PROXIES` configuration; see [the proxy and backup upgrade notes](RELEASE-SECURITY-3.md). Password migration does not change the password or remove 2FA. Use a password reset for dormant accounts that will not log in to migrate.
 
 Application message size is limited to 8 MiB and backup/theme uploads to 512 MiB in this branch. A reverse proxy should also enforce request-size and connection limits. Large backup restores may need a local restore workflow rather than browser upload.
 

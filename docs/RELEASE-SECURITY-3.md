@@ -43,4 +43,24 @@ These source changes do not alter any existing VPS, Nginx, Cloudflare, DNS, acco
 
 Regression tests cover rejection of unsupported/corrupt backups, preservation of original data, failures at each replacement step, persistent recovery files, interrupted startup, session revocation, credential/agent-token/history preservation and spoofed proxy headers. Docker verification additionally downloads and restores an actual running container backup, verifies rejection without data changes, checks exclusive queuing, restarts, checks session revocation and re-exports the result.
 
-Release image verification and scan results will be recorded after publication. Passing tests or vulnerability scans is not a zero-vulnerability guarantee.
+Validation completed on 2026-09-23:
+
+- Full local Go suite and production frontend build passed. The pre-existing GeoIP integration tests require public-network access; they passed when that access was available.
+- [Source Docker regression run](https://github.com/coolman1232004/komari-classic/actions/runs/35702278740): AMD64 and ARM64 passed, including the new live backup/restore checks and the existing authentication, persistence, agent and race checks.
+- [Release workflow](https://github.com/coolman1232004/komari-classic/actions/runs/35807403224): all 25 jobs passed.
+- [Published-image verification](https://github.com/coolman1232004/komari-classic/actions/runs/35808710093): AMD64 and ARM64 passed anonymous pulls, installation, backup/restore, session revocation and image scanning.
+- Linux-target `govulncheck`: zero affected symbols and zero affected imported packages. One module-level advisory describes the unused OpenPGP package.
+
+| Published image, each architecture | Critical/high | Medium | Low | Unknown |
+|---|---:|---:|---:|---:|
+| Server | 0 | 0 | 0 | 2 |
+| Agent | 0 | 0 | 0 | 0 |
+
+The two server entries are GO-2026-5932 for the unimported `golang.org/x/crypto/openpgp` package in the application and bundled cloudflared module metadata. No fixed version is listed. These are reported rather than silently suppressed; the underlying module is still needed for other cryptographic packages. See the [Security 2 analysis](RELEASE-SECURITY-2.md) for the original reachability assessment.
+
+- Release/source commit: `5bb6687f54a5ddc68f3454db8651c3f80b95ae13`.
+- Server multi-architecture digest: `sha256:0a6f56e3fa6df3d917209b0a62424dba257c431fe1023bf6fcafe863fe3389ff`.
+- Agent multi-architecture digest: `sha256:1565d886afe534a8a9961eab32651d0f63b5b568602b9a58aa11c6199da2f130`.
+- `compose.image.yaml` pins the verified server digest. Downloaded scan artifacts were checked against GitHub's recorded SHA-256 values.
+
+Passing tests or vulnerability scans is not a zero-vulnerability guarantee. This update does not claim to be a new exhaustive audit of every deployment, plugin or future dependency version.
