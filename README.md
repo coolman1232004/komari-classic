@@ -8,6 +8,8 @@
 
 固定版本：`v1.2.5-fix2-security.3.1`。AMD64／ARM64 共用相同映像地址。只需要 Docker Engine 和 Compose，主機不需要 Go 或 Node。
 
+請使用下方 `main` 的安裝檔。Security 3.1 原始碼標籤是在映像發佈前建立，標籤內的預製映像 Compose／部分文件仍指向 Security 2；已驗證的 Security 3.1 digest 於發佈後補入 `main`，原始標籤保留不變。已有安裝請先備份並用資料副本驗證升級，勿直接覆寫現有 Compose。
+
 ```sh
 mkdir komari-classic-security
 cd komari-classic-security
@@ -22,6 +24,8 @@ docker compose logs komari
 服務端映像：`ghcr.io/coolman1232004/komari-classic:v1.2.5-fix2-security.3.1`。
 
 探針映像：`ghcr.io/coolman1232004/komari-classic-agent:v1.2.5-fix2-security.3.1`。探針需要你自己的服務端地址及節點 token，宿主機監控範圍視掛載與命名空間設定而定。不需要遠端終端時加入 `--disable-web-ssh`。
+
+**探針啟動注意：** 映像預設命令是 `--help`，只設定環境變數會顯示說明後退出。使用環境變數時，仍需指定啟動參數，例如 `--disable-web-ssh`；Compose 使用 `command: ["--disable-web-ssh"]`。[完整探針範例](docs/DOCKER.md#agent-image)。
 
 [發佈與驗證結果](https://github.com/coolman1232004/komari-classic/releases/tag/v1.2.5-fix2-security.3.1) · [詳細 Docker／備份說明](docs/DOCKER.md) · [安全檢查範圍及限制](docs/SECURITY-AUDIT-2026-09.md)
 
